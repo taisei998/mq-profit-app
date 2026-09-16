@@ -6,6 +6,7 @@ build/
 # secrets
 .env
 .env.local
+.env.*.local
 !.env.example
 
 # SQLite local dev DB

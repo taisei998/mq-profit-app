@@ -4,6 +4,9 @@ import { ProductRegisterPage, LoadRequest } from './pages/ProductRegisterPage.js
 import { OrderAggregationPage } from './pages/OrderAggregationPage.js';
 import { MasterPage } from './pages/MasterPage.js';
 import { HomePage } from './pages/HomePage.js';
+import { LoginPage } from './pages/LoginPage.js';
+import { supabase } from './lib/supabase.js';
+import type { Session } from '@supabase/supabase-js';
 
 type Pane = 0 | 1 | 2 | 3 | 4; // 0=HOME 1=商品一覧 2=粗利作成 3=データアップ 4=マスタ
 
@@ -23,13 +26,18 @@ function today(): string {
 
 export default function App() {
   const [pane, setPane] = useState<Pane>(0);
-  const [apiOk, setApiOk] = useState<boolean | null>(null);
   const [loadRequest, setLoadRequest] = useState<LoadRequest | null>(null);
+  const [session, setSession] = useState<Session | null>(null);
+  const [checking, setChecking] = useState(true);
 
+  // ログイン状態を監視する。ログアウトやセッション切れも自動で反映される。
   useEffect(() => {
-    fetch('/api/health')
-      .then((r) => setApiOk(r.ok))
-      .catch(() => setApiOk(false));
+    supabase.auth.getSession().then(({ data }) => {
+      setSession(data.session);
+      setChecking(false);
+    });
+    const { data: sub } = supabase.auth.onAuthStateChange((_event, s) => setSession(s));
+    return () => sub.subscription.unsubscribe();
   }, []);
 
   function openEdit(id: string) {
@@ -41,6 +49,25 @@ export default function App() {
     setPane(2);
   }
 
+  if (checking) {
+    return (
+      <div className="wrap">
+        <p className="hint" style={{ textAlign: 'center', padding: 40 }}>読み込み中…</p>
+      </div>
+    );
+  }
+
+  // 未ログインならログイン画面だけを出す（データは一切読み込まない）
+  if (!session) {
+    return (
+      <div className="wrap">
+        <LoginPage />
+      </div>
+    );
+  }
+
+  const userLabel = session.user.email ?? 'ログイン中';
+
   return (
     <div className="wrap">
       <div className="topbar">
@@ -50,15 +77,13 @@ export default function App() {
         </div>
         <div className="topbar-right">
           <span className="topbar-date">{today()}</span>
-          {/* 認証が未実装のため、ログインユーザーは表示できない（デザイン案の「山田 太郎」相当） */}
-          <span className="user-chip" title="認証（ログイン）は未実装です">
-            <span className="user-avatar">–</span>未ログイン
+          <span className="user-chip" title={userLabel}>
+            <span className="user-avatar">{userLabel.slice(0, 1).toUpperCase()}</span>
+            {userLabel}
           </span>
-          {apiOk !== null && (
-            <span className={`topbar-badge ${apiOk ? 'ok' : 'err'}`}>
-              {apiOk ? '● サーバー接続OK' : '● サーバーに接続できません'}
-            </span>
-          )}
+          <button className="mini" onClick={() => supabase.auth.signOut()}>
+            ログアウト
+          </button>
         </div>
       </div>
 

@@ -3,6 +3,10 @@ import { fileURLToPath } from 'node:url';
 import { defineConfig } from 'vite';
 
 export default defineConfig({
+  // GitHub Pages は https://<ユーザー名>.github.io/<リポジトリ名>/ で配信されるため、
+  // ビルド時に VITE_BASE=/mq-profit-app/ を渡してパスの起点を合わせる。
+  // 手元の開発では未設定なので '/' のまま。
+  base: process.env.VITE_BASE ?? '/',
   plugins: [react()],
   resolve: {
     alias: {

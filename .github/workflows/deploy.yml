@@ -1,0 +1,60 @@
+# main に push されたら、画面をビルドして GitHub Pages に公開する。
+#
+# Supabaseの接続先は、リポジトリの Settings → Secrets and variables → Actions に
+# 登録した値を使う（SUPABASE_URL / SUPABASE_ANON_KEY）。
+# anon キーはブラウザに埋め込まれる＝公開される前提の鍵。
+# データを守っているのは鍵ではなくDB側のアクセス制御(RLS)なので、これで問題ない。
+name: Deploy to GitHub Pages
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# 同時に走ると公開が競合するので1本ずつ実行する
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+
+      - run: npm ci
+
+      # 計算ロジック(shared)は型としても使うので先にビルドする
+      - run: npm run build --workspace=packages/shared
+
+      - run: npm run test --workspace=packages/shared
+
+      - run: npm run build --workspace=packages/client
+        env:
+          VITE_SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          VITE_SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
+          VITE_BASE: /mq-profit-app/
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: packages/client/dist
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4

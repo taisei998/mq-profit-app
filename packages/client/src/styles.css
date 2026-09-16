@@ -270,3 +270,7 @@ td.code{font-weight:600;}
 .alert-row{display:flex;justify-content:space-between;align-items:center;gap:10px;padding:8px 14px;
   font-size:13px;color:#7f1d1d;border-top:1px solid #fee2e2;}
 .alert-row strong{font-size:15px;font-weight:800;}
+
+/* ログイン画面 */
+.login-card{max-width:420px;margin:60px auto;}
+.login-card h2{margin-bottom:4px;}

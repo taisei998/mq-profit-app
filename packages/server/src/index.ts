@@ -1,4 +1,7 @@
 import 'dotenv/config';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { existsSync } from 'node:fs';
 import cors from 'cors';
 import express from 'express';
 import rateLimit from 'express-rate-limit';
@@ -23,7 +26,17 @@ const allowedOrigins = (process.env.ALLOWED_ORIGINS ?? 'http://localhost:5173')
   .filter(Boolean);
 
 app.disable('x-powered-by');
-app.use(helmet());
+// 本番はリバースプロキシ（ホスティング側）の後ろで動くので、
+// X-Forwarded-* を信頼してクライアントIPとhttps判定を正しく取れるようにする
+if (process.env.NODE_ENV === 'production') app.set('trust proxy', 1);
+app.use(
+  helmet({
+    // 画面（React）を同じサーバーから配信するため、既定の厳しすぎるCSPは使わない。
+    // APIだけのときと違い、インラインstyleやfonts.googleapis.comを読む必要がある。
+    contentSecurityPolicy: false,
+    crossOriginEmbedderPolicy: false,
+  })
+);
 app.use(
   cors({
     origin: allowedOrigins,
@@ -54,9 +67,28 @@ app.use('/api/shops', requireAuth, shopsRouter);
 app.use('/api/csv-mappings', requireAuth, csvMappingsRouter);
 app.use('/api/dashboard', requireAuth, dashboardRouter);
 
+// ===== 画面（ビルド済みReact）の配信 =====
+// 本番は「サーバーが画面も返す」単一サービス構成にする。
+// APIと画面が同じオリジンになるのでCORSの設定が不要になり、公開URLも1本で済む。
+// 開発時(npm run dev)はViteが :5173 で配信するため、このブロックは何もしない。
+const here = path.dirname(fileURLToPath(import.meta.url));
+const clientDist = path.resolve(here, '../../client/dist');
+
+if (existsSync(clientDist)) {
+  app.use(express.static(clientDist));
+  // React側でルーティングしていないが、将来に備えてAPI以外はindex.htmlを返す
+  app.get(/^(?!\/api\/).*/, (_req, res) => {
+    res.sendFile(path.join(clientDist, 'index.html'));
+  });
+  console.log(`[server] 画面を配信します: ${clientDist}`);
+} else {
+  console.log('[server] 画面のビルドが見つかりません（開発中はViteが :5173 で配信します）');
+}
+
 app.use(notFoundHandler);
 app.use(errorHandler);
 
-app.listen(port, () => {
+// ホスティング環境では 0.0.0.0 で待ち受ける必要がある（localhostだけだと外から届かない）
+app.listen(port, '0.0.0.0', () => {
   console.log(`[server] listening on http://localhost:${port}`);
 });

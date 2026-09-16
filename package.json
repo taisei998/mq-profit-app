@@ -9,10 +9,11 @@
     "packages/bsr"
   ],
   "scripts": {
-    "dev": "concurrently -n server,client -c blue,green \"npm run dev --workspace=packages/server\" \"npm run dev --workspace=packages/client\"",
+    "dev": "npm run build --workspace=packages/shared && concurrently -n server,client -c blue,green \"npm run dev --workspace=packages/server\" \"npm run dev --workspace=packages/client\"",
     "dev:server": "npm run dev --workspace=packages/server",
     "dev:client": "npm run dev --workspace=packages/client",
     "build": "npm run build --workspace=packages/shared && npm run build --workspace=packages/server && npm run build --workspace=packages/client && npm run build --workspace=packages/bsr",
+    "start": "npm run start --workspace=packages/server",
     "db:migrate": "npm run db:migrate --workspace=packages/server",
     "db:seed": "npm run db:seed --workspace=packages/server",
     "db:studio": "npm run db:studio --workspace=packages/server",

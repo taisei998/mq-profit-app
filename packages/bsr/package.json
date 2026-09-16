@@ -1,0 +1,26 @@
+{
+  "name": "@ec-ai/bsr",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Amazon BSR・検索順位を毎日取得してGoogleスプレッドシートに書き込むバッチ",
+  "scripts": {
+    "collect": "tsx src/index.ts",
+    "check": "tsx src/index.ts --check",
+    "rank:init": "tsx src/rank-init.ts",
+    "rank:collect": "tsx src/rank.ts",
+    "rank:check": "tsx src/rank.ts --check",
+    "build": "tsc -p tsconfig.json",
+    "start": "node dist/index.js",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "dotenv": "^16.4.5"
+  },
+  "devDependencies": {
+    "@types/node": "^22.9.0",
+    "tsx": "^4.19.2",
+    "typescript": "^5.6.3",
+    "vitest": "^2.1.4"
+  }
+}

@@ -1,0 +1,1898 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>MQ率 利益計算アプリ</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600;9..144,700&family=Zen+Kaku+Gothic+New:wght@400;500;700&display=swap');
+  :root{
+    --ink:#0f172a; --paper:#fbfaf7; --card:#ffffff; --line:#e7e3da;
+    --accent:#1b5f72; --accent-dark:#144a59; --accent-soft:#e6f0f3; --gold:#b88a2e; --muted:#6b7280;
+    --sale:#b4452f; --sale-soft:#fbeae6; --coupon:#7a4f9c; --coupon-soft:#f1ebf7;
+    --err-bg:#fee2e2; --err:#b91c1c; --ok-bg:#dcfce7; --ok:#15803d;
+    --font-body:'Zen Kaku Gothic New',sans-serif; --font-disp:'Fraunces',serif;
+  }
+  *{box-sizing:border-box;margin:0;padding:0;}
+  body{background:var(--paper);color:var(--ink);font-family:var(--font-body);line-height:1.6;padding:28px 16px;
+    background-image:radial-gradient(circle at 1px 1px, rgba(27,95,114,0.06) 1px, transparent 0);background-size:22px 22px;}
+  .wrap{max-width:1180px;margin:0 auto;}
+  .kicker{font-size:11px;letter-spacing:2px;font-weight:700;color:var(--gold);margin-bottom:6px;}
+  h1{font-family:var(--font-disp);font-weight:600;font-size:28px;line-height:1.1;color:var(--accent);}
+  .topbar{margin-bottom:14px;}
+  .layout{display:flex;gap:20px;align-items:flex-start;}
+  .main{flex:1;min-width:0;order:2;}
+  .sidetabs{width:190px;flex-shrink:0;display:flex;flex-direction:column;gap:12px;position:sticky;top:16px;order:1;}
+  .tab{text-align:center;padding:22px 14px;background:var(--accent);color:#fff;border:none;
+    border-radius:6px;font-size:16px;font-weight:700;letter-spacing:1px;cursor:pointer;
+    box-shadow:0 2px 6px rgba(20,74,89,.25);transition:.15s;width:100%;}
+  .tab:hover{background:var(--accent-dark);}
+  .tab.active{background:var(--accent-dark);outline:3px solid var(--gold);outline-offset:2px;}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:24px;margin:0 0 18px;
+    box-shadow:0 1px 2px rgba(16,24,40,.04),0 8px 24px rgba(16,24,40,.03);}
+  @media(max-width:760px){
+    .layout{flex-direction:column;}
+    .main{order:2;}
+    .sidetabs{order:1;width:100%;flex-direction:row;position:static;}
+    .tab{padding:16px 8px;font-size:14px;}
+  }
+  h2{font-family:var(--font-disp);font-weight:600;font-size:20px;margin-bottom:18px;color:var(--accent);}
+  label{display:block;font-size:12.5px;font-weight:700;margin-bottom:6px;color:#374151;}
+  input,select{width:100%;padding:11px 12px;font-size:15px;border:1px solid var(--line);border-radius:10px;
+    background:#fff;font-family:var(--font-body);color:var(--ink);}
+  textarea{width:100%;min-height:80px;padding:11px 12px;font-size:15px;border:1px solid var(--line);border-radius:10px;
+    background:#fff;font-family:var(--font-body);color:var(--ink);resize:vertical;line-height:1.6;}
+  textarea:focus{outline:2px solid var(--accent);border-color:var(--accent);}
+  input:focus,select:focus{outline:2px solid var(--accent);border-color:var(--accent);}
+  .row{display:flex;gap:14px;flex-wrap:wrap;}
+  .row>div{flex:1;min-width:150px;margin-bottom:14px;}
+  button{font-family:inherit;cursor:pointer;}
+  .btn{background:var(--accent);color:#fff;border:none;padding:13px 18px;font-size:15px;font-weight:700;
+    border-radius:10px;width:100%;margin-top:4px;}
+  .btn:hover{background:var(--accent-dark);}
+  .btn-ghost{background:#fff;color:var(--accent);border:1px solid var(--accent);padding:9px 14px;font-size:13.5px;
+    font-weight:700;border-radius:9px;flex:1;}
+  .csv-row{display:flex;gap:10px;margin-top:14px;flex-wrap:wrap;}
+  .hint{font-size:12px;color:var(--muted);margin-top:8px;line-height:1.6;}
+  .status{font-size:13px;margin-top:12px;padding:9px 12px;border-radius:8px;font-weight:600;}
+  .status.ok{background:var(--ok-bg);color:var(--ok);}
+  .status.err{background:var(--err-bg);color:var(--err);}
+  table{width:100%;border-collapse:collapse;font-size:13.5px;}
+  th,td{padding:9px;border-bottom:1px solid var(--line);text-align:right;}
+  th:first-child,td:first-child{text-align:left;}
+  th{color:var(--muted);font-size:11.5px;font-weight:700;}
+  td.code{font-weight:600;}
+  .del{background:#fef2f2;color:#b91c1c;border:1px solid #fecaca;padding:5px 11px;font-size:12.5px;border-radius:7px;font-weight:600;}
+  .mini{background:#fff;color:var(--accent);border:1px solid var(--accent);padding:5px 11px;font-size:12.5px;border-radius:7px;font-weight:700;}
+  .mini:hover{background:var(--accent-soft);}
+  .detail-row td{background:#f8fafc;padding:12px 14px;}
+  .detail-table{width:100%;border-collapse:collapse;font-size:13px;}
+  .detail-table th{font-size:11px;color:var(--muted);font-weight:700;padding:5px 8px;text-align:right;}
+  .detail-table th:first-child{text-align:left;}
+  .detail-table td{padding:5px 8px;border-bottom:1px solid var(--line);text-align:right;}
+  .detail-table td:first-child{text-align:left;}
+  .detail-note{margin-top:10px;font-size:12.5px;color:#374151;white-space:pre-wrap;}
+  .detail-ctrl{font-size:12.5px;font-weight:700;color:var(--muted);margin-bottom:10px;display:flex;align-items:center;gap:8px;}
+  .detail-ctrl select{width:auto;padding:7px 10px;font-size:13px;}
+  .ship-pick{display:flex;justify-content:space-between;align-items:center;gap:10px;padding:10px 12px;border-bottom:1px solid var(--line);cursor:pointer;}
+  .ship-pick:last-child{border-bottom:none;}
+  .ship-pick:hover{background:var(--accent-soft);}
+  .tip{display:inline-flex;align-items:center;justify-content:center;width:16px;height:16px;border-radius:50%;
+    background:var(--accent);color:#fff;font-size:11px;font-weight:700;cursor:help;position:relative;vertical-align:middle;}
+  .tip:hover,.tip:focus{outline:none;}
+  .tip::after{content:attr(data-tip);position:absolute;left:130%;top:50%;transform:translateY(-50%);
+    background:#0f172a;color:#fff;padding:9px 12px;border-radius:8px;font-size:12px;font-weight:500;line-height:1.6;
+    white-space:normal;width:260px;text-align:left;
+    opacity:0;visibility:hidden;transition:opacity .12s;z-index:60;box-shadow:0 6px 18px rgba(0,0,0,.25);pointer-events:none;}
+  .tip::before{content:'';position:absolute;left:130%;top:50%;transform:translateX(-100%) translateY(-50%);
+    border:6px solid transparent;border-right-color:#0f172a;opacity:0;visibility:hidden;transition:opacity .12s;z-index:60;}
+  .tip:hover::after,.tip:focus::after,.tip:hover::before,.tip:focus::before{opacity:1;visibility:visible;}
+  @media(max-width:640px){ .tip::after{width:200px;} }
+  .table-title{font-size:12.5px;font-weight:700;color:var(--muted);margin-bottom:8px;}
+  .hidden{display:none;}
+  .day-block{border:1px solid var(--line);border-radius:12px;padding:14px 16px;margin-top:12px;background:linear-gradient(135deg,var(--accent-soft),#f4f9fb);}
+  .day-head{display:flex;justify-content:space-between;align-items:baseline;flex-wrap:wrap;gap:8px;}
+  .day-date{font-weight:700;font-size:15px;}
+  .day-rate{font-family:var(--font-disp);font-size:26px;font-weight:700;color:var(--accent);}
+  .day-detail{font-size:12.5px;color:var(--muted);margin-top:4px;}
+  .warn{font-size:12.5px;color:var(--gold);margin-top:6px;font-weight:600;}
+  .footer{text-align:center;font-size:11.5px;color:var(--muted);margin-top:6px;}
+  .scroll{overflow-x:auto;}
+  .seg{display:inline-flex;background:#eef1f0;border-radius:10px;padding:4px;gap:4px;margin-bottom:16px;flex-wrap:wrap;}
+  .reg-head{display:flex;gap:16px;margin-bottom:14px;flex-wrap:wrap;}
+  .reg-grid{flex:2;min-width:300px;display:grid;grid-template-columns:1fr 1fr;gap:14px;align-content:start;}
+  .reg-note{flex:1;min-width:200px;display:flex;flex-direction:column;}
+  .reg-note textarea{flex:1;min-height:120px;width:100%;padding:11px 12px;font-size:15px;border:1px solid var(--line);
+    border-radius:10px;background:#fff;font-family:var(--font-body);color:var(--ink);resize:vertical;line-height:1.6;}
+  .reg-note textarea:focus{outline:2px solid var(--accent);border-color:var(--accent);}
+  @media(max-width:640px){ .reg-grid{grid-template-columns:1fr;} }
+  .seg button{border:none;background:transparent;padding:9px 16px;border-radius:8px;font-size:13.5px;font-weight:700;color:var(--muted);}
+  .seg button.on-normal{background:var(--accent);color:#fff;}
+  .seg button.on-sale{background:var(--sale);color:#fff;}
+  .seg button.on-coupon{background:var(--coupon);color:#fff;}
+
+  /* セット価格表（セルがボタン化） */
+  .price-table{width:100%;border-collapse:collapse;margin-top:4px;}
+  .price-table th{font-size:12px;color:var(--muted);font-weight:700;text-align:center;padding:6px;}
+  .price-table td{padding:5px;border:none;text-align:center;}
+  .price-table td.lbl{text-align:left;font-weight:700;font-size:13px;color:#374151;white-space:nowrap;}
+  .cell-btn{width:100%;min-width:84px;padding:10px 8px;font-size:14px;text-align:right;border:1px solid var(--line);
+    border-radius:9px;background:#fff;color:var(--ink);font-family:var(--font-body);transition:.12s;}
+  .cell-btn:hover{border-color:var(--accent);background:var(--accent-soft);}
+  .cell-btn.zero{color:#b6b6b6;}
+  .cell-input{width:100%;min-width:84px;padding:10px 8px;font-size:14px;text-align:right;border:1px solid var(--line);
+    border-radius:9px;background:#fff;color:var(--ink);font-family:var(--font-body);}
+  .cell-input:focus{outline:2px solid var(--accent);border-color:var(--accent);}
+  .cell-input.ro{background:#f3f4f6;color:#6b7280;}
+  .cell-input::placeholder{color:#b6b6b6;opacity:1;font-size:14px;}
+  .cell-input::-webkit-input-placeholder{color:#b6b6b6;opacity:1;font-size:14px;}
+  .pane-sale .cell-input:focus{outline-color:var(--sale);border-color:var(--sale);}
+  .pane-coupon .cell-input:focus{outline-color:var(--coupon);border-color:var(--coupon);}
+  .pane-sale .cell-btn:hover{border-color:var(--sale);background:var(--sale-soft);}
+  .pane-coupon .cell-btn:hover{border-color:var(--coupon);background:var(--coupon-soft);}
+  .price-table tr.rate-row td{border-top:2px solid var(--line);padding-top:10px;font-weight:700;}
+  .price-table td.rate-cell{font-family:var(--font-disp);font-size:18px;color:var(--accent);}
+  .price-table tr.sub-row td{padding-top:6px;font-weight:600;}
+  .price-table td.sub-cell{font-size:13px;color:#374151;}
+  .pane-sale .price-table td.sub-cell{color:#374151;}
+  .pane-coupon .price-table td.sub-cell{color:#374151;}
+  .pane-sale .price-table td.rate-cell{color:var(--sale);}
+  .pane-coupon .price-table td.rate-cell{color:var(--coupon);}
+  .grp-title{font-size:13px;font-weight:700;margin:4px 0 6px;}
+  .grp-normal{color:var(--accent);} .grp-sale{color:var(--sale);} .grp-coupon{color:var(--coupon);}
+  .legend{display:inline-block;width:10px;height:10px;border-radius:2px;margin-right:5px;vertical-align:middle;}
+
+  /* 詳細入力オーバーレイ */
+  .overlay{position:fixed;inset:0;background:rgba(15,23,42,.45);display:flex;align-items:flex-start;justify-content:center;
+    padding:24px 14px;overflow-y:auto;z-index:50;}
+  .overlay.hidden{display:none;}
+  .sheet{background:#fff;border-radius:18px;max-width:680px;width:100%;padding:24px;box-shadow:0 20px 60px rgba(0,0,0,.25);margin:auto;}
+  .sheet h3{font-family:var(--font-disp);font-weight:600;font-size:20px;color:var(--accent);margin-bottom:4px;}
+  .sheet .ctx{font-size:12.5px;color:var(--muted);margin-bottom:16px;}
+  .line-table{width:100%;border-collapse:collapse;font-size:13.5px;}
+  .line-table th{font-size:11.5px;color:var(--muted);font-weight:700;text-align:left;padding:6px 6px;}
+  .line-table td{padding:5px 6px;border-bottom:1px solid var(--line);}
+  .line-table input{padding:9px 8px;font-size:14px;}
+  .line-table input.num{text-align:right;}
+  .line-amt{font-weight:700;white-space:nowrap;text-align:right;}
+  .row-del{background:#fef2f2;color:#b91c1c;border:1px solid #fecaca;border-radius:7px;padding:6px 9px;font-size:12px;font-weight:700;}
+  .sheet-total{display:flex;justify-content:space-between;align-items:baseline;margin-top:16px;padding-top:14px;border-top:2px solid var(--line);}
+  .sheet-total .t-lbl{font-size:13px;font-weight:700;color:var(--muted);}
+  .sheet-total .t-val{font-family:var(--font-disp);font-size:26px;font-weight:700;color:var(--accent);}
+  .sheet-actions{display:flex;gap:10px;margin-top:18px;}
+  .sheet-actions .btn{margin-top:0;}
+  @media(max-width:640px){
+    .price-table th,.price-table td{padding:3px;} .cell-btn{font-size:12.5px;padding:8px 5px;min-width:64px;}
+    .line-table th,.line-table td{padding:4px 3px;} .line-table input{font-size:12.5px;padding:7px 5px;}
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="topbar">
+    <div>
+      <div class="kicker">EC MARKETING / PROFIT TOOL</div>
+      <h1>MQ率 利益計算アプリ</h1>
+    </div>
+  </div>
+
+  <div class="layout">
+    <div class="main">
+
+  <!-- ① 商品一覧 -->
+  <div class="card hidden" id="pane1">
+    <h2>② 商品一覧</h2>
+    <p class="hint" style="margin-bottom:8px;">登録済みの商品を一覧で確認できます。商品の追加は「①商品登録」から行ってください。入力内容はこのブラウザに自動保存され、次回開いたとき自動で復元されます。</p>
+    <div class="csv-row" style="margin-top:4px;">
+      <button class="btn-ghost" onclick="exportMaster()">⬇ 商品マスターをCSV保存</button>
+      <button class="btn-ghost" onclick="document.getElementById('masterFile').click()">⬆ 商品マスターCSVを読込</button>
+      <input id="masterFile" type="file" accept=".csv" class="hidden" onchange="importMaster(event)">
+    </div>
+    <p class="hint">バックアップや別PCへの移行には「CSV保存」を使ってください。</p>
+    <div id="listStatus"></div>
+    <div id="emptyMaster" class="status err" style="margin-top:14px;">まだ商品が登録されていません。「①商品登録」から追加してください。</div>
+    <div id="masterTableWrap" class="hidden" style="margin-top:14px;">
+      <div style="margin-bottom:10px;">
+        <label>検索（固有ID・カテゴリ・商品コード・商品名・規格）</label>
+        <input id="searchBox" type="text" placeholder="キーワードを入力（例: A0001 / 青果 / A-001 / 5kg）" oninput="renderMaster()">
+      </div>
+      <div class="table-title" id="masterCount"></div>
+      <div class="scroll">
+      <table>
+        <thead><tr>
+          <th>固有ID</th><th>カテゴリ</th><th>コード</th><th>商品名</th><th>規格</th><th>操作</th>
+        </tr></thead>
+        <tbody id="masterBody"></tbody>
+      </table>
+      </div>
+      <p class="hint">「詳細」で通常・SALE・SALE＋クーポンの粗利率を表示します。「編集」で②に内容を読み込み、「複製」で同じ内容をコピーして新規登録できます。</p>
+    </div>
+  </div>
+
+  <!-- ② 商品の登録 -->
+  <div class="card" id="pane2">
+    <h2>① 商品登録</h2>
+    <div class="reg-head">
+      <div class="reg-grid">
+        <div><label>カテゴリ</label>
+          <select id="mCategory">
+            <option value="青果">1. 青果</option>
+            <option value="精肉・肉加工品">2. 精肉・肉加工品</option>
+            <option value="魚介・水産加工品">3. 魚介・水産加工品</option>
+            <option value="雑穀米">4. 雑穀米</option>
+            <option value="米">5. 米</option>
+            <option value="惣菜・調味料">6. 惣菜・調味料</option>
+            <option value="水・ソフトドリンク">7. 水・ソフトドリンク</option>
+            <option value="お菓子・パン">8. お菓子・パン</option>
+            <option value="その他">9. その他</option>
+          </select>
+        </div>
+        <div><label>商品コード</label><input id="mCode" placeholder="例: A-001"></div>
+        <div><label>商品名</label><input id="mName" placeholder="例: プレミアムサプリ"></div>
+        <div><label>規格</label><input id="mSpec" placeholder="例: 5kg"></div>
+      </div>
+      <div class="reg-note">
+        <label>備考</label>
+        <textarea id="mNote" placeholder="おまけなどがあった場合はこちらに記入(2+1,3+2など)"></textarea>
+      </div>
+    </div>
+    <p class="hint" style="margin-bottom:10px;">
+      各金額のマスをタップすると、税抜単価・税率・数量を明細で入力できます（複数行の積み上げ可）。
+      入力すると税込の合算値がマスに表示され、粗利率が自動計算されます。
+      複数セットを空欄にした場合は、その区分の1セット時の値が使われます。
+    </p>
+    <div class="seg">
+      <button id="segNormal" class="on-normal" onclick="switchMode('normal')">通常時</button>
+      <button id="segSale" onclick="switchMode('sale')">SALE時</button>
+      <button id="segCoupon" onclick="switchMode('coupon')">SALE＋クーポン時</button>
+    </div>
+    <div style="display:flex;gap:16px;flex-wrap:wrap;margin-bottom:16px;">
+      <div style="max-width:200px;">
+        <label>販売金額の税率（全セット共通）</label>
+        <select id="mPriceTax" onchange="onPriceTaxChange()">
+          <option value="10">10%</option>
+          <option value="8">8%（軽減税率）</option>
+          <option value="0">0%（非課税）</option>
+        </select>
+      </div>
+      <div style="max-width:160px;">
+        <label>セット数</label>
+        <select id="mSetCount" onchange="onSetCountChange()">
+          <option value="1">1セット</option>
+          <option value="2">2セット</option>
+          <option value="3">3セット</option>
+          <option value="4">4セット</option>
+          <option value="5" selected>5セット</option>
+        </select>
+      </div>
+    </div>
+    <div id="paneNormal">
+      <div class="grp-title grp-normal"><span class="legend" style="background:var(--accent);"></span>通常時の価格・粗利率</div>
+      <div class="scroll" id="tblNormal"></div>
+    </div>
+    <div id="paneSale" class="hidden pane-sale">
+      <div class="grp-title grp-sale"><span class="legend" style="background:var(--sale);"></span>SALE時の価格・粗利率</div>
+      <button type="button" class="btn-ghost" style="width:100%;margin-bottom:12px;" onclick="copyFromNormal('s')">📋 通常時の入力を全部コピー</button>
+      <div class="scroll" id="tblSale"></div>
+    </div>
+    <div id="paneCoupon" class="hidden pane-coupon">
+      <div class="grp-title grp-coupon"><span class="legend" style="background:var(--coupon);"></span>SALE＋クーポン時の価格・粗利率</div>
+      <button type="button" class="btn-ghost" style="width:100%;margin-bottom:12px;" onclick="copyFromNormal('c')">📋 通常時の入力を全部コピー</button>
+      <div class="scroll" id="tblCoupon"></div>
+    </div>
+    <button class="btn" style="margin-top:14px;" onclick="addMaster()">この商品を登録</button>
+    <div id="mStatus"></div>
+  </div>
+
+  <!-- ③ 粗利集計 -->
+  <div class="card hidden" id="pane3">
+    <h2>③ 粗利集計</h2>
+    <div class="table-title">受注CSVを読み込む</div>
+    <button class="btn-ghost" style="width:100%;" onclick="document.getElementById('orderFile').click()">📄 受注CSVファイルを選択</button>
+    <input id="orderFile" type="file" accept=".csv" class="hidden" onchange="loadOrderCSV(event)">
+    <p class="hint">列が多いCSVでもOK。受注日時＝5列目・商品コード＝10列目・単価＝12列目・数量＝13列目を自動で選択します（全モール共通フォーマット）。内容が異なる場合は下で列を選び直せます。</p>
+    <div id="mapArea" class="hidden" style="margin-top:16px;">
+      <div class="table-title">どの列を使うか選択してください</div>
+      <div class="row">
+        <div><label>受注日の列</label><select id="colDate"></select></div>
+        <div><label>商品コードの列</label><select id="colCode"></select></div>
+      </div>
+      <div class="row">
+        <div><label>支払い金額の列</label><select id="colAmount"></select></div>
+        <div><label>数量の列</label><select id="colQty"></select></div>
+      </div>
+      <div class="row">
+        <div>
+          <label>通常／SALE／クーポンの判定</label>
+          <select id="saleMode" onchange="onSaleModeChange()">
+            <option value="all_normal">すべて通常時として計算</option>
+            <option value="all_sale">すべてSALE時として計算</option>
+            <option value="all_coupon">すべてSALE＋クーポン時として計算</option>
+            <option value="by_column">CSVの列で判定する</option>
+            <option value="by_price">単価と商品登録の価格を照合して自動判定</option>
+          </select>
+        </div>
+        <div id="saleColWrap" class="hidden">
+          <label>区分の判定に使う列</label>
+          <select id="colSale"></select>
+        </div>
+        <div id="unitColWrap" class="hidden">
+          <label>単価（1個あたりの価格）の列</label>
+          <select id="colUnit"></select>
+        </div>
+      </div>
+      <p class="hint" id="saleColHint">
+        「列で判定」の場合、その列の値で振り分けます。<br>
+        ・「クーポン」「coupon」を含む → SALE＋クーポン時<br>
+        ・「SALE」「セール」「割引」を含む → SALE時<br>
+        ・空欄や「通常」「0」 → 通常時<br>
+        「単価と照合」の場合、その行の単価を商品登録の各区分・各セットの価格候補と比べ、最も近いものを区分として採用します（支払い金額は単価×数量で計算）。
+      </p>
+      <button class="btn" onclick="processOrders()">この設定で集計する</button>
+      <div id="orderStatus"></div>
+    </div>
+    <div id="resultBody" class="hidden" style="margin-top:22px;">
+      <div class="table-title">全期間の合計</div>
+      <div class="day-block">
+        <div class="day-head">
+          <div class="day-date">全体の粗利率（売上加重平均）</div>
+          <div class="day-rate" id="totalRate">—</div>
+        </div>
+        <div class="day-detail" id="totalDetail"></div>
+        <div class="warn hidden" id="totalWarn"></div>
+      </div>
+      <div class="csv-row"><button class="btn-ghost" onclick="exportResult()">⬇ 集計結果をCSV保存</button></div>
+      <div class="table-title" style="margin-top:18px;">単日ごとの粗利率</div>
+      <div id="dailyWrap"></div>
+      <div class="table-title" style="margin-top:18px;">カテゴリ別の集計（全期間）</div>
+      <div class="scroll"><table>
+        <thead><tr><th>カテゴリ</th><th>件数</th><th>売上計</th><th>粗利計</th><th>粗利率</th></tr></thead>
+        <tbody id="categoryBody"></tbody>
+      </table></div>
+      <div class="table-title" style="margin-top:18px;">商品別の集計（全期間）</div>
+      <div class="scroll"><table>
+        <thead><tr><th>カテゴリ</th><th>コード</th><th>商品名</th><th>件数</th><th>売上計</th><th>粗利計</th><th>粗利率</th></tr></thead>
+        <tbody id="productBody"></tbody>
+      </table></div>
+    </div>
+  </div>
+
+  <!-- ④ マスタ -->
+  <div class="card hidden" id="pane4">
+    <h2>④ マスタ</h2>
+    <div class="seg" style="margin-bottom:18px;">
+      <button id="subSite" class="on-normal" onclick="switchMaster('site')">①サイトマスタ</button>
+      <button id="subShip" onclick="switchMaster('ship')">②送料マスタ</button>
+      <button id="subMat" onclick="switchMaster('mat')">③資材マスタ</button>
+    </div>
+
+    <!-- サイトマスタ -->
+    <div id="msite">
+      <p class="hint" style="margin-bottom:12px;">サイト（モール）ごとの手数料率を登録しておけます。①商品登録の「手数料」明細でこのサイトを選ぶと、登録した手数料がまとめて明細に追加されます。</p>
+      <div class="row">
+        <div><label>サイト名</label><input id="siteName" placeholder="例: 楽天市場"></div>
+      </div>
+      <div class="row">
+        <div><label>サイト手数料（%）</label><input id="siteFee" type="number" min="0" step="0.01" placeholder="例: 3.5"></div>
+        <div><label>クーポン手数料（%）</label><input id="siteCouponFee" type="number" min="0" step="0.01" placeholder="例: 1.0"></div>
+      </div>
+      <div class="row">
+        <div><label>コンサル手数料（%）</label><input id="siteConsultFee" type="number" min="0" step="0.01" placeholder="例: 2.0"></div>
+      </div>
+      <div>
+        <label>その他手数料（項目を追加できます）</label>
+        <div id="siteOtherFeeRows"></div>
+        <button type="button" class="btn-ghost" style="width:100%;margin-top:6px;" onclick="addOtherFeeRow()">＋ その他手数料の項目を追加</button>
+      </div>
+      <div class="row" style="margin-top:14px;">
+        <div style="flex:1 1 100%;"><label>備考</label><textarea id="siteNote" placeholder="メモ・注意事項など自由に記入"></textarea></div>
+      </div>
+      <button class="btn" onclick="addSite()">このサイトを登録</button>
+      <div id="siteStatus"></div>
+      <div id="siteTableWrap" class="hidden" style="margin-top:16px;">
+        <div class="table-title" id="siteCount"></div>
+        <div class="scroll">
+        <table>
+          <thead><tr><th>サイト名</th><th>サイト手数料</th><th>クーポン手数料</th><th>コンサル手数料</th><th>その他</th><th>備考</th><th>操作</th></tr></thead>
+          <tbody id="siteBody"></tbody>
+        </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- 送料マスタ -->
+    <div id="mship" class="hidden">
+      <p class="hint" style="margin-bottom:12px;">送料を登録しておくと、①商品登録の「発送運賃」明細で選んで金額を入れられます。税込は税抜単価×(1+税率%)で自動計算します。</p>
+      <div class="row">
+        <div><label>配送会社</label><input id="shipCarrier" placeholder="例: ヤマト運輸"></div>
+        <div><label>温度帯</label>
+          <select id="shipTemp">
+            <option value="常温便">常温便</option>
+            <option value="クール便">クール便</option>
+            <option value="その他">その他</option>
+          </select>
+        </div>
+        <div><label>箱サイズ</label><input id="shipSize" placeholder="例: 60サイズ"></div>
+      </div>
+      <div class="row">
+        <div><label>金額（税抜・円）</label><input id="shipAmount" type="number" min="0" placeholder="例: 800"></div>
+        <div><label>税率%</label><input id="shipTax" type="number" min="0" placeholder="例: 10" value="10"></div>
+      </div>
+      <button class="btn" onclick="addShip()">この送料を登録</button>
+      <div id="shipStatus"></div>
+      <div id="shipTableWrap" class="hidden" style="margin-top:16px;">
+        <div class="table-title" id="shipCount"></div>
+        <div class="scroll">
+        <table>
+          <thead><tr><th>配送会社</th><th>温度帯</th><th>箱サイズ</th><th>税抜単価</th><th>税率%</th><th>税込</th><th>操作</th></tr></thead>
+          <tbody id="shipBody"></tbody>
+        </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- 資材マスタ -->
+    <div id="mmat" class="hidden">
+      <p class="hint" style="margin-bottom:12px;">資材を登録できます（税込は税抜単価×(1+税率%)で自動計算）。</p>
+      <div class="row">
+        <div><label>資材名</label><input id="matName" placeholder="例: 宅配袋A4"></div>
+        <div><label>税抜単価（円）</label><input id="matUnit" type="number" min="0" placeholder="例: 30"></div>
+        <div><label>税率%</label><input id="matTax" type="number" min="0" placeholder="例: 10" value="10"></div>
+      </div>
+      <button class="btn" onclick="addMat()">この資材を登録</button>
+      <div id="matStatus"></div>
+      <div id="matTableWrap" class="hidden" style="margin-top:16px;">
+        <div class="table-title" id="matCount"></div>
+        <div class="scroll">
+        <table>
+          <thead><tr><th>資材名</th><th>税抜単価</th><th>税率%</th><th>税込</th><th>操作</th></tr></thead>
+          <tbody id="matBody"></tbody>
+        </table>
+        </div>
+      </div>
+    </div>
+  </div>
+
+    </div>
+    <aside class="sidetabs">
+      <button class="tab active" id="tab2" onclick="showPane(2)">①商品登録</button>
+      <button class="tab" id="tab1" onclick="showPane(1)">②商品一覧</button>
+      <button class="tab" id="tab3" onclick="showPane(3)">③粗利集計</button>
+      <button class="tab" id="tab4" onclick="showPane(4)">④マスタ</button>
+    </aside>
+  </div>
+
+  <div class="footer">社内利用向け · データはこのPCのブラウザ内のみで処理され、外部送信されません</div>
+</div>
+
+<!-- 詳細入力オーバーレイ -->
+<div id="overlay" class="overlay hidden">
+  <div class="sheet">
+    <h3 id="ovTitle">明細入力</h3>
+    <div class="ctx" id="ovCtx"></div>
+    <div id="ovCopyArea"></div>
+    <div class="scroll">
+    <table class="line-table">
+      <thead id="ovHead"></thead>
+      <tbody id="ovLines"></tbody>
+    </table>
+    </div>
+    <button class="btn-ghost" style="margin-top:12px;width:100%;" onclick="addLine()">＋ 明細行を追加</button>
+    <div class="sheet-total"><div class="t-lbl">税込 合算</div><div class="t-val" id="ovTotal">¥0</div></div>
+    <div class="sheet-actions">
+      <button class="btn-ghost" onclick="closeOverlay(false)">キャンセル</button>
+      <button class="btn" onclick="closeOverlay(true)">この内容で確定</button>
+    </div>
+  </div>
+</div>
+
+<script>
+/* ===== 区分・項目定義 ===== */
+const GROUPS = ['normal','sale','coupon'];
+const GROUP_LABEL = {normal:'通常', sale:'SALE', coupon:'SALE+クーポン'};
+const GROUP_COLOR = {normal:'var(--accent)', sale:'var(--sale)', coupon:'var(--coupon)'};
+const GROUP_PREFIX = {normal:'n', sale:'s', coupon:'c'};
+const PREFIX_GROUP = {n:'normal', s:'sale', c:'coupon'};
+
+const FIELDS = [
+  {key:'price',   label:'販売金額'},
+  {key:'coupon',  label:'クーポン'},
+  {key:'cost',    label:'商品原価', tip:'仕入れ値など、商品そのものの原価'},
+  {key:'mfg',     label:'製造原価', tip:'人件費や精米費など'},
+  {key:'pack',    label:'荷造包装費', tip:'受注費、出荷費など'},
+  {key:'material',label:'資材費', tip:'同梱ツール、袋、箱など'},
+  {key:'ship',    label:'発送運賃', tip:'送料'},
+  {key:'fee',     label:'手数料', tip:'LINE送信費やクーポン手数料やモール手数料やコンサル手数料や支援金など'},
+  {key:'pointup', label:'ポイントUP', tip:'ポイント倍率'},
+  {key:'other',   label:'その他', tip:'上記に含まれないものがあれば'}
+];
+const FIELD_LABEL = {}; FIELDS.forEach(function(f){ FIELD_LABEL[f.key]=f.label; });
+const DEDUCT_KEYS = ['coupon','cost','mfg','pack','material','ship','fee','pointup','other'];
+
+/* ===== 状態 =====
+ 入力中フォームの明細は formData[prefix][fieldKey][setIndex] = [ {desc, unit, tax, qty}, ... ]
+ master[code] = { code,name,category, normal:{fields:{key:[5セットの税込合算]}, prices, rates, lines:{key:[5セットの明細配列]}}, sale, coupon } */
+let formData = {};
+let master = {};
+let sites = {}; // サイトマスタ: name -> {date,code,amount,qty,sale,saleMode}（列番号は1始まり）
+let rawRows=[], rawHeader=[], lastResult=null;
+let ov = null; // 編集中: {prefix, fieldKey, setIndex}
+
+function initFormData(){
+  formData = {};
+  ['n','s','c'].forEach(function(p){
+    formData[p] = {};
+    FIELDS.forEach(function(f){
+      formData[p][f.key] = [[],[],[],[],[]]; // 5セット分、各セットは明細配列
+    });
+  });
+}
+initFormData();
+
+/* ===== 明細→税込合算 ===== */
+// 税込単価のみで入力する項目（税抜単価・税率を使わない）
+const TAXINCL_FIELDS = ['price','coupon'];
+const POINT_KEY = 'pointup'; // 倍率(%)入力 → 販売金額(税込)×倍率% を負担額とする
+const FEE_KEY = 'fee';       // 内容・%・金額を手入力（金額をそのまま負担額に）
+function isTaxInclField(key){ return TAXINCL_FIELDS.indexOf(key)!==-1; }
+function isPointField(key){ return key===POINT_KEY; }
+function isFeeField(key){ return key===FEE_KEY; }
+// 四捨五入（小数点以下を丸める）
+function r(n){ return Math.round(n); }
+function lineAmount(ln){
+  if(ln.fee){ // 手数料：金額をそのまま使用（自動計算なし）
+    const amt=toNum(ln.amount);
+    return amt===null?0:r(amt);
+  }
+  const unit=toNum(ln.unit), qty=toNum(ln.qty);
+  if(unit===null) return 0;
+  const q = qty===null?1:qty;
+  const yv = (ln.yld!=null) ? toNum(ln.yld) : null; // 歩留まり%
+  const ydiv = (yv!=null && yv>0) ? yv/100 : 1;     // ÷歩留まり%（0や未入力は等倍）
+  if(ln.incl){ // 税込単価×数量
+    return r(unit * q / ydiv);
+  }
+  const tax=toNum(ln.tax);
+  const t = tax===null?0:tax;
+  return r(unit * (1 + t/100) * q / ydiv); // 税込換算 ÷歩留まり
+}
+function linesTotal(lines){
+  let s=0; (lines||[]).forEach(function(ln){ s+=lineAmount(ln); }); return s;
+}
+// 税抜額：incl明細(販売金額/クーポン)は inclTaxRate% で税抜換算、原価類は税抜単価×数量、手数料は金額そのまま
+function lineAmountEx(ln, inclTaxRate){
+  if(ln.fee){ const amt=toNum(ln.amount); return amt===null?0:amt; }
+  const unit=toNum(ln.unit), qty=toNum(ln.qty);
+  if(unit===null) return 0;
+  const q = qty===null?1:qty;
+  const yv = (ln.yld!=null) ? toNum(ln.yld) : null;
+  const ydiv = (yv!=null && yv>0) ? yv/100 : 1;
+  if(ln.incl){ const t=(inclTaxRate==null?0:inclTaxRate); return unit*q/ydiv/(1+t/100); }
+  return unit*q/ydiv; // 原価類は税抜単価×数量÷歩留まり
+}
+function linesExTotal(lines, inclTaxRate){
+  let s=0; (lines||[]).forEach(function(ln){ s+=lineAmountEx(ln, inclTaxRate); }); return s;
+}
+function priceTaxRate(){ const el=document.getElementById('mPriceTax'); return el?toNum(el.value):10; }
+const COUPON_TAX = 8; // クーポンの税抜換算は8%固定
+// ポイントUP明細の倍率(%)合計（複数行あれば加算）
+function pointMultSum(lines){
+  let s=0; (lines||[]).forEach(function(ln){ const m=toNum(ln.mult); if(m!==null) s+=m; }); return s;
+}
+
+/* ===== セット表（セルはボタン） ===== */
+const DIRECT_FIELDS=['price','coupon']; // マスに直接入力する項目
+function isDirectField(key){ return DIRECT_FIELDS.indexOf(key)!==-1; }
+function buildInputTables(){
+  GROUPS.forEach(function(g){
+    const pre = GROUP_PREFIX[g];
+    let html='<table class="price-table"><thead><tr><th></th>'+
+      '<th class="col-1">1セット</th><th class="col-2">2セット</th><th class="col-3">3セット</th><th class="col-4">4セット</th><th class="col-5">5セット</th></tr></thead><tbody>';
+    FIELDS.forEach(function(f){
+      const tipHtml = f.tip ? ' <span class="tip" tabindex="0" data-tip="'+escAttr(f.tip)+'">?</span>' : '';
+      html+='<tr><td class="lbl">'+f.label+'(円)'+tipHtml+'</td>';
+      for(let i=0;i<5;i++){
+        if(isDirectField(f.key)){
+          // 直接入力。販売金額は1セット入力時に2セット以降を自動算出するが、各マス手動上書きも可
+          html+='<td class="col-'+(i+1)+'"><input type="number" class="cell-input" id="dcell_'+pre+'_'+f.key+'_'+i+'" '+
+            'placeholder="¥0" oninput="onDirectInput(\''+pre+'\',\''+f.key+'\','+i+',this.value)"></td>';
+        } else {
+          html+='<td class="col-'+(i+1)+'"><button type="button" class="cell-btn" id="cell_'+pre+'_'+f.key+'_'+i+'" '+
+            'onclick="openOverlay(\''+pre+'\',\''+f.key+'\','+i+')">¥0</button></td>';
+        }
+      }
+      html+='</tr>';
+    });
+    html+='<tr class="rate-row"><td class="lbl">粗利率(税込)</td>';
+    for(let i=0;i<5;i++) html+='<td id="rate_'+pre+'_'+i+'" class="rate-cell col-'+(i+1)+'">—</td>';
+    html+='</tr>';
+    html+='<tr class="sub-row"><td class="lbl">粗利率(税抜)</td>';
+    for(let i=0;i<5;i++) html+='<td id="ratex_'+pre+'_'+i+'" class="sub-cell col-'+(i+1)+'">—</td>';
+    html+='</tr>';
+    html+='<tr class="sub-row"><td class="lbl">粗利額(税込)</td>';
+    for(let i=0;i<5;i++) html+='<td id="profit_'+pre+'_'+i+'" class="sub-cell col-'+(i+1)+'">—</td>';
+    html+='</tr>';
+    html+='<tr class="sub-row"><td class="lbl">粗利額(税抜)</td>';
+    for(let i=0;i<5;i++) html+='<td id="profitx_'+pre+'_'+i+'" class="sub-cell col-'+(i+1)+'">—</td>';
+    html+='</tr>';
+    html+='</tbody></table>';
+    document.getElementById('tbl'+cap(g)).innerHTML = html;
+  });
+  refreshAllCells();
+  applySetCount();
+}
+function cap(s){ return s.charAt(0).toUpperCase()+s.slice(1); }
+function onPriceTaxChange(){ refreshAllCells(); }
+function getSetCount(){ const el=document.getElementById('mSetCount'); return el?(parseInt(el.value,10)||5):5; }
+function onSetCountChange(){ applySetCount(); }
+function applySetCount(){
+  const n=getSetCount();
+  for(let c=1;c<=5;c++){
+    const show=(c<=n);
+    document.querySelectorAll('.col-'+c).forEach(function(el){ el.style.display = show?'':'none'; });
+  }
+}
+
+// 直接入力（販売金額・クーポン）の処理
+function onDirectInput(pre, fieldKey, i, val){
+  const v = toNum(val);
+  if(fieldKey==='price'){
+    if(i===0){
+      // 1セットの金額：2セット以降を ×セット数 で自動算出して保存＆表示
+      for(let k=0;k<5;k++){
+        if(v===null){ formData[pre]['price'][k]=[]; }
+        else { formData[pre]['price'][k]=[{unit:String(v), qty:String(k+1), incl:true}]; }
+      }
+      for(let k=1;k<5;k++){
+        const inp=document.getElementById('dcell_'+pre+'_price_'+k);
+        if(inp && document.activeElement!==inp) inp.value = (v===null?'':Math.round(v*(k+1)));
+      }
+    } else {
+      // 2セット以降の手動上書き：その金額をそのまま販売金額に
+      if(v===null) formData[pre]['price'][i]=[];
+      else formData[pre]['price'][i]=[{unit:String(v), qty:'1', incl:true}];
+    }
+  } else { // coupon: 税込金額をそのまま、数量1
+    if(v===null) formData[pre][fieldKey][i]=[];
+    else formData[pre][fieldKey][i]=[{unit:String(v), qty:'1', incl:true}];
+  }
+  refreshGroupCells(pre);
+}
+
+// クーポン値引き後の販売金額（税込/税抜）
+function netSales(pre, i){ return linesTotal(formData[pre]['price'][i]) - linesTotal(formData[pre]['coupon'][i]); }
+function netSalesEx(pre, i){
+  return linesExTotal(formData[pre]['price'][i], priceTaxRate()) - linesExTotal(formData[pre]['coupon'][i], COUPON_TAX);
+}
+// 手数料の負担額：Σ( (販売金額−クーポン) × pct% ÷ (1+ftax%) )
+// 手数料：base × pct% が税抜額。税込はさらに×(1+税率%)。
+function feeTotal(base, lines, mode){
+  let s=0;
+  (lines||[]).forEach(function(ln){
+    const pct=toNum(ln.pct); if(pct===null) return;
+    const ft=toNum(ln.ftax); const tf=(ft===null?0:ft)/100;
+    const ex = base * (pct/100);          // 税抜手数料
+    s += (mode==='ex') ? ex : ex*(1+tf);  // 税込は×(1+税率%)
+  });
+  return s;
+}
+function setTotalFor(pre, fieldKey, i){
+  if(isPointField(fieldKey)){
+    const price = linesTotal(formData[pre]['price'][i]); // 販売金額(税込)
+    const mult = pointMultSum(formData[pre][fieldKey][i]); // 倍率%合計
+    return r(price * mult / 100); // ポイント負担額は四捨五入
+  }
+  if(isFeeField(fieldKey)){
+    return r(feeTotal(netSales(pre,i), formData[pre][fieldKey][i], 'incl'));
+  }
+  return linesTotal(formData[pre][fieldKey][i]);
+}
+// 税抜の項目合計
+function setTotalExFor(pre, fieldKey, i){
+  if(isPointField(fieldKey)){
+    const priceEx = linesExTotal(formData[pre]['price'][i], priceTaxRate()); // 販売金額(税抜)
+    const mult = pointMultSum(formData[pre][fieldKey][i]);
+    return r(priceEx * mult / 100);
+  }
+  if(isFeeField(fieldKey)){
+    return r(feeTotal(netSalesEx(pre,i), formData[pre][fieldKey][i], 'ex'));
+  }
+  let rate = null;
+  if(fieldKey==='price') rate = priceTaxRate();
+  else if(fieldKey==='coupon') rate = COUPON_TAX;
+  return linesExTotal(formData[pre][fieldKey][i], rate);
+}
+function refreshCell(pre, fieldKey, i){
+  if(isDirectField(fieldKey)){
+    const inp=document.getElementById('dcell_'+pre+'_'+fieldKey+'_'+i);
+    if(!inp) return;
+    const ls=formData[pre][fieldKey][i]||[];
+    if(fieldKey==='price'){
+      // 表示はセット合計（単価×セット数）。ただし入力中の上書きは避け、値が空のときのみ反映
+      const total=linesTotal(ls);
+      if(document.activeElement!==inp) inp.value = (ls.length? Math.round(total) : '');
+    } else {
+      const unit = ls.length? toNum(ls[0].unit) : null;
+      if(document.activeElement!==inp) inp.value = (unit===null?'':Math.round(unit));
+    }
+    return;
+  }
+  const btn=document.getElementById('cell_'+pre+'_'+fieldKey+'_'+i);
+  if(!btn) return;
+  const t=setTotalFor(pre, fieldKey, i);
+  btn.textContent = '¥'+Math.round(t).toLocaleString();
+  btn.classList.toggle('zero', t===0);
+}
+function refreshRate(pre, i){
+  const price=setTotalFor(pre,'price',i);
+  const rateCell=document.getElementById('rate_'+pre+'_'+i);
+  const ratexCell=document.getElementById('ratex_'+pre+'_'+i);
+  const profitCell=document.getElementById('profit_'+pre+'_'+i);
+  const profitxCell=document.getElementById('profitx_'+pre+'_'+i);
+  if(!rateCell) return;
+  if(price<=0){
+    if(rateCell) rateCell.textContent='—';
+    if(ratexCell) ratexCell.textContent='—';
+    if(profitCell) profitCell.textContent='—';
+    if(profitxCell) profitxCell.textContent='—';
+    return;
+  }
+  // 税込
+  let deduct=0; DEDUCT_KEYS.forEach(function(k){ deduct+=setTotalFor(pre,k,i); });
+  const profit=r(price-deduct);
+  const rate=profit/price*100;
+  if(rateCell) rateCell.textContent=rate.toFixed(1)+'%';
+  if(profitCell) profitCell.textContent='¥'+profit.toLocaleString();
+  // 税抜
+  const priceEx=setTotalExFor(pre,'price',i);
+  let deductEx=0; DEDUCT_KEYS.forEach(function(k){ deductEx+=setTotalExFor(pre,k,i); });
+  const profitEx=r(priceEx-deductEx);
+  if(profitxCell) profitxCell.textContent='¥'+profitEx.toLocaleString();
+  if(ratexCell) ratexCell.textContent = priceEx>0 ? (profitEx/priceEx*100).toFixed(1)+'%' : '—';
+}
+function refreshGroupCells(pre){
+  FIELDS.forEach(function(f){ for(let i=0;i<5;i++) refreshCell(pre,f.key,i); });
+  for(let i=0;i<5;i++) refreshRate(pre,i);
+}
+function refreshAllCells(){ ['n','s','c'].forEach(refreshGroupCells); }
+
+/* ===== オーバーレイ（明細入力） ===== */
+function newLine(fieldKey, setIndex){
+  if(isPointField(fieldKey)) return {mult:''};
+  if(isFeeField(fieldKey)) return {desc:'',pct:'',ftax:'10',fee:true};
+  if(fieldKey==='price') return {desc:'',unit:'',qty:String((setIndex||0)+1),incl:true}; // 数量=セット数を初期値に
+  if(isTaxInclField(fieldKey)) return {desc:'',unit:'',qty:'1',incl:true};
+  if(fieldKey==='cost') return {desc:'',unit:'',tax:'10',qty:String((setIndex||0)+1),yld:'100'}; // 商品原価：数量=セット数・歩留まり100%初期
+  return {desc:'',unit:'',tax:'10',qty:'1'};
+}
+function openOverlay(pre, fieldKey, i){
+  ov = {prefix:pre, fieldKey:fieldKey, setIndex:i, incl:isTaxInclField(fieldKey), point:isPointField(fieldKey), fee:isFeeField(fieldKey)};
+  ov.priceTotal = linesTotal(formData[pre]['price'][i]); // ポイント負担額の算定に使う販売金額(税込)
+  // 既存の明細をコピーして編集用に表示（確定時に書き戻す）
+  ov.draft = JSON.parse(JSON.stringify(formData[pre][fieldKey][i] || []));
+  if(!ov.point && !ov.fee) ov.draft.forEach(function(ln){ ln.incl = ov.incl; });
+  if(ov.fee) ov.draft.forEach(function(ln){ ln.fee = true; });
+  if(ov.draft.length===0){
+    if(fieldKey==='pack'){
+      // 荷造包装費は初期で「受注費」「出荷費」の2行
+      ov.draft.push({desc:'受注費',unit:'',tax:'10',qty:'1'});
+      ov.draft.push({desc:'出荷費',unit:'',tax:'10',qty:'1'});
+    } else if(fieldKey==='cost'){
+      // 商品原価は初期で「原価」1行（数量はセット数、歩留まり100%）
+      ov.draft.push({desc:'原価',unit:'',tax:'10',qty:String(i+1),yld:'100'});
+    } else if(fieldKey==='fee'){
+      // 手数料は初期で「サイト手数料」1行（税率10%）
+      ov.draft.push({desc:'サイト手数料',pct:'',ftax:'10',fee:true});
+    } else {
+      ov.draft.push(newLine(fieldKey, i));
+    }
+  }
+  // ポイント負担額の基準（手数料はクーポン値引き後の販売金額を基準に表示）
+  ov.netSales = netSales(pre, i);
+  document.getElementById('ovTitle').textContent = ov.point ? '弊社負担分のポイント費用' : (FIELD_LABEL[fieldKey]+' の明細入力');
+  document.getElementById('ovCtx').textContent = ov.point
+    ? (GROUP_LABEL[PREFIX_GROUP[pre]]+'時 ／ '+(i+1)+'セット ／ 販売金額(税込) '+yen(ov.priceTotal)+' × 倍率% を負担額として計算します')
+    : (ov.fee
+      ? (GROUP_LABEL[PREFIX_GROUP[pre]]+'時 ／ '+(i+1)+'セット ／ クーポン値引き後の販売金額(税込) '+yen(ov.netSales)+' × ％ ×(1+税率%) で税込を自動算出します')
+      : (ov.incl
+        ? GROUP_LABEL[PREFIX_GROUP[pre]]+'時 ／ '+(i+1)+'セット ／ 税込単価×数量 を行ごとに合算します'
+        : GROUP_LABEL[PREFIX_GROUP[pre]]+'時 ／ '+(i+1)+'セット ／ 税抜単価×(1+税率)×数量 を行ごとに合算します'));
+  // 2セット以降は「1セットの項目をコピー」を表示
+  const copyArea = document.getElementById('ovCopyArea');
+  const firstLines = formData[pre][fieldKey][0] || [];
+  if(i>=1){
+    if(firstLines.length>0){
+      let label;
+      if(ov.point) label='1セットの倍率をコピー（'+pointMultSum(firstLines)+'倍）';
+      else if(ov.fee) label='1セットの内容をコピー（'+firstLines.length+'行・¥'+Math.round(linesTotal(firstLines)).toLocaleString()+'）';
+      else label='1セットの項目をコピー（'+firstLines.length+'行・¥'+Math.round(linesTotal(firstLines)).toLocaleString()+'）';
+      copyArea.innerHTML = '<button type="button" class="btn-ghost" style="width:100%;margin-bottom:14px;" '+
+        'onclick="copyFromFirstSet()">📋 '+label+'</button>';
+    } else {
+      copyArea.innerHTML = '<button type="button" class="btn-ghost" style="width:100%;margin-bottom:14px;opacity:.5;cursor:not-allowed;" '+
+        'disabled>📋 1セットの項目をコピー（1セットが未入力です）</button>';
+    }
+  } else {
+    copyArea.innerHTML = '';
+  }
+  // 発送運賃：送料マスタから選ぶ（検索窓＋絞り込みリスト）
+  if(fieldKey==='ship'){
+    const keys=Object.keys(shipMaster);
+    let sel='<div style="margin-bottom:14px;"><label>送料マスタから選ぶ</label>';
+    if(keys.length===0){
+      sel+='<div class="hint">送料マスタが未登録です。「④マスタ → 送料マスタ」で登録できます。</div>';
+    } else {
+      sel+='<input id="shipSearch" type="text" placeholder="検索（配送会社・温度帯・箱サイズ）" oninput="renderShipPicker(this.value)" style="margin-bottom:8px;">'+
+        '<div id="shipPicker" style="max-height:220px;overflow-y:auto;border:1px solid var(--line);border-radius:10px;"></div>';
+    }
+    sel+='</div>';
+    copyArea.innerHTML += sel;
+  }
+  // 資材費：資材マスタから選ぶ
+  if(fieldKey==='material'){
+    copyArea.innerHTML += matPickerHtml();
+  }
+  // 手数料：サイトマスタから選ぶ（登録済みの手数料をまとめて追加）
+  if(fieldKey==='fee'){
+    copyArea.innerHTML += sitePickerHtml();
+  }
+  renderLines();
+  if(fieldKey==='ship' && Object.keys(shipMaster).length>0) renderShipPicker('');
+  if(fieldKey==='material' && Object.keys(matMaster).length>0) renderMatPicker('');
+  if(fieldKey==='fee' && Object.keys(sites).length>0) renderSitePicker('');
+  document.getElementById('overlay').classList.remove('hidden');
+}
+// 手数料：サイトマスタから選ぶ（検索窓＋絞り込みリスト）を組み立て
+function sitePickerHtml(){
+  const keys=Object.keys(sites);
+  let sel='<div style="margin-bottom:14px;"><label>サイトマスタから手数料を選ぶ</label>';
+  if(keys.length===0){
+    sel+='<div class="hint">サイトマスタが未登録です。「④マスタ → サイトマスタ」で登録できます。</div>';
+  } else {
+    sel+='<input id="siteFeeSearch" type="text" placeholder="検索（サイト名）" oninput="renderSitePicker(this.value)" style="margin-bottom:8px;">'+
+      '<div id="siteFeePicker" style="max-height:220px;overflow-y:auto;border:1px solid var(--line);border-radius:10px;"></div>';
+  }
+  sel+='</div>';
+  return sel;
+}
+function renderSitePicker(q){
+  const box=document.getElementById('siteFeePicker'); if(!box) return;
+  const query=(q||'').trim().toLowerCase();
+  const keys=Object.keys(sites).filter(function(n){ return !query || n.toLowerCase().indexOf(query)!==-1; });
+  if(keys.length===0){ box.innerHTML='<div class="hint" style="padding:12px;">該当するサイトがありません。</div>'; return; }
+  box.innerHTML=keys.map(function(n){
+    const s=sites[n];
+    const items=[];
+    if(s.fee!=null) items.push('サイト'+s.fee+'%');
+    if(s.couponFee!=null) items.push('クーポン'+s.couponFee+'%');
+    if(s.consultFee!=null) items.push('コンサル'+s.consultFee+'%');
+    (s.otherFees||[]).forEach(function(f){ if(f.pct!=null) items.push((f.desc||'その他')+f.pct+'%'); });
+    return '<div class="ship-pick" onclick="addSiteFees(\''+jsEsc(n)+'\')">'+
+      '<span style="font-weight:700;">'+esc(n)+'</span>'+
+      '<span style="color:var(--muted);font-size:12.5px;">'+esc(items.join('・')||'手数料未設定')+'</span>'+
+      '</div>';
+  }).join('');
+}
+// サイトマスタの手数料をまとめて手数料明細に追加
+function addSiteFees(name){
+  if(!ov || !name || !sites[name]) return;
+  const s=sites[name];
+  if(ov.draft.length===1 && toNum(ov.draft[0].pct)===null && (!ov.draft[0].desc||ov.draft[0].desc==='サイト手数料')){
+    ov.draft=[];
+  }
+  if(s.fee!=null) ov.draft.push({desc:'サイト手数料',pct:String(s.fee),ftax:'10',fee:true});
+  if(s.couponFee!=null) ov.draft.push({desc:'クーポン手数料',pct:String(s.couponFee),ftax:'10',fee:true});
+  if(s.consultFee!=null) ov.draft.push({desc:'コンサル手数料',pct:String(s.consultFee),ftax:'10',fee:true});
+  (s.otherFees||[]).forEach(function(f){
+    if(f.pct!=null) ov.draft.push({desc:f.desc||'その他手数料',pct:String(f.pct),ftax:'10',fee:true});
+  });
+  if(ov.draft.length===0) ov.draft.push(newLine('fee', ov.setIndex));
+  renderLines();
+}
+// 資材費：資材マスタから選ぶ（検索窓＋絞り込みリスト）を組み立て
+function matPickerHtml(){
+  const keys=Object.keys(matMaster);
+  let sel='<div style="margin-bottom:14px;"><label>資材マスタから選ぶ</label>';
+  if(keys.length===0){
+    sel+='<div class="hint">資材マスタが未登録です。「④マスタ → 資材マスタ」で登録できます。</div>';
+  } else {
+    sel+='<input id="matSearch" type="text" placeholder="検索（資材名）" oninput="renderMatPicker(this.value)" style="margin-bottom:8px;">'+
+      '<div id="matPicker" style="max-height:220px;overflow-y:auto;border:1px solid var(--line);border-radius:10px;"></div>';
+  }
+  sel+='</div>';
+  return sel;
+}
+function renderMatPicker(q){
+  const box=document.getElementById('matPicker'); if(!box) return;
+  const query=(q||'').trim().toLowerCase();
+  const keys=Object.keys(matMaster).filter(function(n){
+    if(!query) return true;
+    return n.toLowerCase().indexOf(query)!==-1;
+  });
+  if(keys.length===0){ box.innerHTML='<div class="hint" style="padding:12px;">該当する資材がありません。</div>'; return; }
+  box.innerHTML=keys.map(function(n){
+    const m=matMaster[n];
+    return '<div class="ship-pick" onclick="addMatLine(\''+jsEsc(n)+'\')">'+
+      '<span style="font-weight:700;">'+esc(n)+'</span>'+
+      '<span style="color:var(--muted);font-size:12.5px;">税抜'+yen(m.unit||0)+'・税率'+(m.tax||0)+'%</span>'+
+      '</div>';
+  }).join('');
+}
+function addMatLine(name){
+  if(!ov || !name || !matMaster[name]) return;
+  const m=matMaster[name];
+  if(ov.draft.length===1 && (ov.draft[0].unit==null||String(ov.draft[0].unit).trim()==='')){
+    ov.draft=[];
+  }
+  ov.draft.push({desc:name, unit:String(m.unit||0), tax:String(m.tax!=null?m.tax:10), qty:'1'});
+  renderLines();
+}
+// 送料マスタの絞り込みリストを描画
+function renderShipPicker(q){
+  const box=document.getElementById('shipPicker'); if(!box) return;
+  const query=(q||'').trim().toLowerCase();
+  const keys=Object.keys(shipMaster).filter(function(n){
+    if(!query) return true;
+    const s=shipMaster[n];
+    const hay=[(s.carrier||''),(s.temp||''),(s.size||''),n].join(' ').toLowerCase();
+    return hay.indexOf(query)!==-1;
+  });
+  if(keys.length===0){ box.innerHTML='<div class="hint" style="padding:12px;">該当する送料がありません。</div>'; return; }
+  box.innerHTML=keys.map(function(n){
+    const s=shipMaster[n];
+    return '<div class="ship-pick" onclick="addShipLine(\''+jsEsc(n)+'\')">'+
+      '<span style="font-weight:700;">'+esc(n)+'</span>'+
+      '<span style="color:var(--muted);font-size:12.5px;">税抜'+yen(s.unit||0)+'・税率'+(s.tax||0)+'%</span>'+
+      '</div>';
+  }).join('');
+}
+// 送料マスタから1行追加（税込金額として）
+function addShipLine(name){
+  if(!ov || !name || !shipMaster[name]) return;
+  const s=shipMaster[name];
+  // 空の初期行だけなら置き換え
+  if(ov.draft.length===1 && (ov.draft[0].unit==null||String(ov.draft[0].unit).trim()==='')){
+    ov.draft=[];
+  }
+  ov.draft.push({desc:name, unit:String(s.unit||0), tax:String(s.tax!=null?s.tax:10), qty:'1'});
+  renderLines();
+}
+function renderLines(){
+  if(ov.point){ renderPointLines(); return; }
+  if(ov.fee){ renderFeeLines(); return; }
+  const incl = ov.incl;
+  const noDesc = (ov.fieldKey==='coupon' || ov.fieldKey==='price'); // 販売金額・クーポンは内容列なし
+  const isCost = (ov.fieldKey==='cost'); // 商品原価は歩留まり%列あり
+  document.getElementById('ovHead').innerHTML = incl
+    ? '<tr>'+(noDesc?'':'<th style="width:46%;">内容（任意）</th>')+'<th style="width:'+(noDesc?'46%':'24%')+';">税込単価</th><th style="width:18%;">数量</th><th style="width:20%;text-align:right;">税込</th><th></th></tr>'
+    : '<tr><th style="width:28%;">内容（任意）</th><th style="width:16%;">税抜単価</th><th style="width:12%;">税率%</th><th style="width:12%;">数量</th>'+(isCost?'<th style="width:14%;">歩留まり%</th>':'')+'<th style="width:14%;text-align:right;">税込</th><th></th></tr>';
+  const body=document.getElementById('ovLines');
+  body.innerHTML = ov.draft.map(function(ln, idx){
+    let cells = '';
+    if(!noDesc){
+      cells += '<td><input type="text" value="'+escAttr(ln.desc||'')+'" oninput="upd('+idx+',\'desc\',this.value)" placeholder="部材A など"></td>';
+    }
+    cells += '<td><input type="number" class="num" value="'+escAttr(ln.unit||'')+'" oninput="upd('+idx+',\'unit\',this.value)" placeholder="円"></td>';
+    if(!incl){
+      cells += '<td><input type="number" class="num" value="'+escAttr(ln.tax||'')+'" oninput="upd('+idx+',\'tax\',this.value)" placeholder="%"></td>';
+    }
+    cells += '<td><input type="number" class="num" value="'+escAttr(ln.qty||'')+'" oninput="upd('+idx+',\'qty\',this.value)" placeholder="個"></td>';
+    if(isCost){
+      cells += '<td><input type="number" class="num" value="'+escAttr(ln.yld!=null?ln.yld:'100')+'" oninput="upd('+idx+',\'yld\',this.value)" placeholder="%"></td>';
+    }
+    cells +=
+      '<td class="line-amt" id="lamt'+idx+'">¥'+Math.round(lineAmount(ln)).toLocaleString()+'</td>'+
+      '<td><button type="button" class="row-del" onclick="delLine('+idx+')">×</button></td>';
+    return '<tr>'+cells+'</tr>';
+  }).join('');
+  updOvTotal();
+}
+function renderPointLines(){
+  document.getElementById('ovHead').innerHTML =
+    '<tr><th style="width:55%;">倍率</th><th style="width:30%;text-align:right;">負担額</th><th></th></tr>';
+  const body=document.getElementById('ovLines');
+  body.innerHTML = ov.draft.map(function(ln, idx){
+    const amt = ov.priceTotal * (toNum(ln.mult)||0) / 100;
+    return '<tr>'+
+      '<td><input type="number" class="num" value="'+escAttr(ln.mult||'')+'" oninput="updP('+idx+',\'mult\',this.value)" placeholder="倍" style="text-align:right;"> <span style="font-size:12px;color:var(--muted);">倍</span></td>'+
+      '<td class="line-amt" id="lamt'+idx+'">¥'+Math.round(amt).toLocaleString()+'</td>'+
+      '<td><button type="button" class="row-del" onclick="delLine('+idx+')">×</button></td>'+
+      '</tr>';
+  }).join('');
+  updOvTotal();
+}
+function feeLineAmount(ln, base){
+  const pct=toNum(ln.pct); if(pct===null) return 0;
+  const ft=toNum(ln.ftax); const tf=(ft===null?0:ft)/100;
+  return base*(pct/100)*(1+tf); // 税込手数料
+}
+function renderFeeLines(){
+  document.getElementById('ovHead').innerHTML =
+    '<tr><th style="width:34%;">内容</th><th style="width:20%;">パーセンテージ</th><th style="width:16%;">税率%</th><th style="width:22%;text-align:right;">金額(自動)</th><th></th></tr>';
+  const body=document.getElementById('ovLines');
+  const base=ov.netSales||0;
+  body.innerHTML = ov.draft.map(function(ln, idx){
+    const amt=feeLineAmount(ln, base);
+    return '<tr>'+
+      '<td><input type="text" value="'+escAttr(ln.desc||'')+'" oninput="updF('+idx+',\'desc\',this.value)" placeholder="例: サイト手数料"></td>'+
+      '<td><input type="number" class="num" value="'+escAttr(ln.pct||'')+'" oninput="updF('+idx+',\'pct\',this.value)" placeholder="%" style="text-align:right;"></td>'+
+      '<td><input type="number" class="num" value="'+escAttr(ln.ftax!=null?ln.ftax:'10')+'" oninput="updF('+idx+',\'ftax\',this.value)" placeholder="%" style="text-align:right;"></td>'+
+      '<td class="line-amt" id="lamt'+idx+'">¥'+Math.round(amt).toLocaleString()+'</td>'+
+      '<td><button type="button" class="row-del" onclick="delLine('+idx+')">×</button></td>'+
+      '</tr>';
+  }).join('');
+  updOvTotal();
+}
+function updF(idx, key, val){
+  ov.draft[idx][key]=val;
+  const base=ov.netSales||0;
+  const amtCell=document.getElementById('lamt'+idx);
+  if(amtCell) amtCell.textContent='¥'+Math.round(feeLineAmount(ov.draft[idx], base)).toLocaleString();
+  updOvTotal();
+}
+function upd(idx, key, val){
+  ov.draft[idx][key]=val;
+  const amtCell=document.getElementById('lamt'+idx);
+  if(amtCell) amtCell.textContent='¥'+Math.round(lineAmount(ov.draft[idx])).toLocaleString();
+  updOvTotal();
+}
+function updP(idx, key, val){
+  ov.draft[idx][key]=val;
+  const amtCell=document.getElementById('lamt'+idx);
+  if(amtCell) amtCell.textContent='¥'+Math.round(ov.priceTotal*(toNum(ov.draft[idx].mult)||0)/100).toLocaleString();
+  updOvTotal();
+}
+function addLine(){ if(!ov) return; ov.draft.push(newLine(ov.fieldKey, ov.setIndex)); renderLines(); }
+function delLine(idx){ if(!ov) return; ov.draft.splice(idx,1); if(ov.draft.length===0) ov.draft.push(newLine(ov.fieldKey, ov.setIndex)); renderLines(); }
+function copyFromFirstSet(){
+  if(!ov) return;
+  const first = formData[ov.prefix][ov.fieldKey][0] || [];
+  if(first.length===0) return;
+  if(ov.fieldKey==='price'){
+    // 販売金額は税込単価のみコピー。数量はこのセット数（setIndex+1）を維持
+    const qty = String(ov.setIndex+1);
+    ov.draft = first.map(function(ln){ return {unit:ln.unit, qty:qty, incl:true}; });
+    renderLines();
+    return;
+  }
+  ov.draft = JSON.parse(JSON.stringify(first));
+  if(!ov.point && !ov.fee) ov.draft.forEach(function(ln){ ln.incl = ov.incl; });
+  if(ov.fee) ov.draft.forEach(function(ln){ ln.fee = true; });
+  if(ov.fieldKey==='cost'){ // 商品原価：コピー時に数量をこのセット数へ
+    const qty=String(ov.setIndex+1);
+    ov.draft.forEach(function(ln){ ln.qty=qty; });
+  }
+  renderLines();
+}
+function updOvTotal(){
+  if(!ov) return;
+  let total;
+  if(ov.point){ total = ov.priceTotal * pointMultSum(ov.draft) / 100; }
+  else if(ov.fee){ const base=ov.netSales||0; total=0; ov.draft.forEach(function(ln){ total+=feeLineAmount(ln, base); }); }
+  else { total = linesTotal(ov.draft); }
+  const lbl = document.querySelector('.sheet-total .t-lbl');
+  if(lbl) lbl.textContent = ov.point ? 'ポイント負担額 合計' : (ov.fee ? '手数料 合計' : '税込 合算');
+  document.getElementById('ovTotal').textContent='¥'+Math.round(total).toLocaleString();
+}
+function closeOverlay(save){
+  if(ov && save){
+    let clean;
+    if(ov.point){ clean = ov.draft.filter(function(ln){ return toNum(ln.mult)!==null; }); }
+    else if(ov.fee){ clean = ov.draft.filter(function(ln){ return toNum(ln.pct)!==null; }); }
+    else { clean = ov.draft.filter(function(ln){ return toNum(ln.unit)!==null; }); }
+    formData[ov.prefix][ov.fieldKey][ov.setIndex] = clean;
+    // 販売金額やポイント倍率の変更を全体に反映（ポイント負担額は販売金額依存のため）
+    refreshGroupCells(ov.prefix);
+  }
+  document.getElementById('overlay').classList.add('hidden');
+  ov=null;
+}
+
+/* ===== タブ・区分切替 ===== */
+function showPane(n){
+  [1,2,3,4].forEach(function(i){
+    document.getElementById('pane'+i).classList.toggle('hidden', i!==n);
+    document.getElementById('tab'+i).classList.toggle('active', i===n);
+  });
+  if(n===4) switchMaster('site');
+  window.scrollTo({top:0,behavior:'smooth'});
+}
+function switchMode(mode){
+  document.getElementById('paneNormal').classList.toggle('hidden', mode!=='normal');
+  document.getElementById('paneSale').classList.toggle('hidden', mode!=='sale');
+  document.getElementById('paneCoupon').classList.toggle('hidden', mode!=='coupon');
+  document.getElementById('segNormal').className = mode==='normal'?'on-normal':'';
+  document.getElementById('segSale').className = mode==='sale'?'on-sale':'';
+  document.getElementById('segCoupon').className = mode==='coupon'?'on-coupon':'';
+}
+function onSaleModeChange(){
+  const v=document.getElementById('saleMode').value;
+  document.getElementById('saleColWrap').classList.toggle('hidden', v!=='by_column');
+  document.getElementById('unitColWrap').classList.toggle('hidden', v!=='by_price');
+}
+
+/* ===== ④ サイトマスタ ===== */
+const SITE_STORAGE_KEY='mqApp_sites_v1';
+function switchMaster(which){
+  const map={site:'msite',ship:'mship',mat:'mmat'};
+  Object.keys(map).forEach(function(k){ document.getElementById(map[k]).classList.toggle('hidden', k!==which); });
+  document.getElementById('subSite').className = which==='site'?'on-normal':'';
+  document.getElementById('subShip').className = which==='ship'?'on-normal':'';
+  document.getElementById('subMat').className = which==='mat'?'on-normal':'';
+  if(which==='site'){ renderSites(); renderOtherFeeRows(); }
+  else if(which==='ship') renderShips();
+  else if(which==='mat') renderMats();
+}
+
+/* 送料マスタ */
+let shipMaster={}; // name -> {amount, memo}
+const SHIP_STORAGE_KEY='mqApp_ship_v1';
+function saveShips(){ try{ localStorage.setItem(SHIP_STORAGE_KEY, JSON.stringify(shipMaster)); }catch(e){} }
+function loadSavedShips(){ try{ const s=localStorage.getItem(SHIP_STORAGE_KEY); if(s){ const o=JSON.parse(s); if(o&&typeof o==='object'){ shipMaster=o; return true; } } }catch(e){} return false; }
+function shipLabel(carrier,temp,size){
+  return [carrier,temp,size].filter(function(x){return x&&x.trim()!=='';}).join('・') || '(無題)';
+}
+function addShip(){
+  const carrier=document.getElementById('shipCarrier').value.trim();
+  const temp=document.getElementById('shipTemp').value.trim();
+  const size=document.getElementById('shipSize').value.trim();
+  const amount=toNum(document.getElementById('shipAmount').value);
+  const tax=toNum(document.getElementById('shipTax').value);
+  if(!carrier && !temp && !size){ setStatus('shipStatus','配送会社・温度帯・箱サイズのいずれかを入力してください。','err'); return; }
+  if(amount===null){ setStatus('shipStatus','金額（税抜）を入力してください。','err'); return; }
+  const name=shipLabel(carrier,temp,size);
+  shipMaster[name]={carrier:carrier, temp:temp, size:size, unit:amount, tax:(tax===null?10:tax)};
+  saveShips();
+  setStatus('shipStatus','✅ 送料「'+name+'」を登録しました。','ok');
+  ['shipCarrier','shipSize','shipAmount'].forEach(function(id){ document.getElementById(id).value=''; });
+  document.getElementById('shipTemp').selectedIndex=0;
+  document.getElementById('shipTax').value='10';
+  renderShips();
+}
+function removeShip(name){ delete shipMaster[name]; saveShips(); renderShips(); }
+function shipIncl(s){ return r((s.unit||0)*(1+(s.tax||0)/100)); }
+function renderShips(){
+  const keys=Object.keys(shipMaster);
+  const wrap=document.getElementById('shipTableWrap');
+  if(keys.length===0){ wrap.classList.add('hidden'); return; }
+  wrap.classList.remove('hidden');
+  document.getElementById('shipCount').textContent='登録済み '+keys.length+' 件';
+  document.getElementById('shipBody').innerHTML=keys.map(function(n){
+    const s=shipMaster[n];
+    return '<tr>'+
+      '<td style="text-align:left;">'+esc(s.carrier||'—')+'</td>'+
+      '<td style="text-align:left;">'+esc(s.temp||'—')+'</td>'+
+      '<td style="text-align:left;">'+esc(s.size||'—')+'</td>'+
+      '<td>'+yen(s.unit||0)+'</td><td>'+(s.tax||0)+'%</td><td>'+yen(shipIncl(s))+'</td>'+
+      '<td><button class="del" onclick="removeShip(\''+jsEsc(n)+'\')">削除</button></td></tr>';
+  }).join('');
+}
+
+/* 資材マスタ */
+let matMaster={}; // name -> {unit, tax}
+const MAT_STORAGE_KEY='mqApp_mat_v1';
+function saveMats(){ try{ localStorage.setItem(MAT_STORAGE_KEY, JSON.stringify(matMaster)); }catch(e){} }
+function loadSavedMats(){ try{ const s=localStorage.getItem(MAT_STORAGE_KEY); if(s){ const o=JSON.parse(s); if(o&&typeof o==='object'){ matMaster=o; return true; } } }catch(e){} return false; }
+function addMat(){
+  const name=document.getElementById('matName').value.trim();
+  const unit=toNum(document.getElementById('matUnit').value);
+  const tax=toNum(document.getElementById('matTax').value);
+  if(!name){ setStatus('matStatus','資材名を入力してください。','err'); return; }
+  if(unit===null){ setStatus('matStatus','税抜単価を入力してください。','err'); return; }
+  matMaster[name]={unit:unit, tax:(tax===null?10:tax)};
+  saveMats();
+  setStatus('matStatus','✅ 資材「'+name+'」を登録しました。','ok');
+  document.getElementById('matName').value=''; document.getElementById('matUnit').value='';
+  document.getElementById('matTax').value='10';
+  renderMats();
+}
+function removeMat(name){ delete matMaster[name]; saveMats(); renderMats(); }
+function renderMats(){
+  const keys=Object.keys(matMaster);
+  const wrap=document.getElementById('matTableWrap');
+  if(keys.length===0){ wrap.classList.add('hidden'); return; }
+  wrap.classList.remove('hidden');
+  document.getElementById('matCount').textContent='登録済み '+keys.length+' 件';
+  document.getElementById('matBody').innerHTML=keys.map(function(n){
+    const m=matMaster[n]; const incl=r(m.unit*(1+(m.tax||0)/100));
+    return '<tr><td style="text-align:left;font-weight:700;">'+esc(n)+'</td>'+
+      '<td>'+yen(m.unit)+'</td><td>'+(m.tax||0)+'%</td><td>'+yen(incl)+'</td>'+
+      '<td><button class="del" onclick="removeMat(\''+jsEsc(n)+'\')">削除</button></td></tr>';
+  }).join('');
+}
+
+function saveSites(){ try{ localStorage.setItem(SITE_STORAGE_KEY, JSON.stringify(sites)); }catch(e){} }
+function loadSavedSites(){
+  try{ const s=localStorage.getItem(SITE_STORAGE_KEY); if(s){ const o=JSON.parse(s); if(o&&typeof o==='object'){ sites=o; return true; } } }catch(e){}
+  return false;
+}
+/* その他手数料（追加式）の編集中データ */
+let siteOtherFeeDraft=[];
+function addOtherFeeRow(){ siteOtherFeeDraft.push({desc:'',pct:''}); renderOtherFeeRows(); }
+function removeOtherFeeRow(idx){ siteOtherFeeDraft.splice(idx,1); renderOtherFeeRows(); }
+function updOtherFeeRow(idx,key,val){ siteOtherFeeDraft[idx][key]=val; }
+function renderOtherFeeRows(){
+  const box=document.getElementById('siteOtherFeeRows');
+  if(siteOtherFeeDraft.length===0){ box.innerHTML='<p class="hint">まだ項目がありません。「＋ その他手数料の項目を追加」で追加してください。</p>'; return; }
+  box.innerHTML=siteOtherFeeDraft.map(function(f,idx){
+    return '<div style="display:flex;gap:8px;margin-bottom:8px;align-items:center;">'+
+      '<input type="text" value="'+escAttr(f.desc||'')+'" oninput="updOtherFeeRow('+idx+',\'desc\',this.value)" placeholder="内容（例: 支援金）" style="flex:2;">'+
+      '<input type="number" step="0.01" value="'+escAttr(f.pct||'')+'" oninput="updOtherFeeRow('+idx+',\'pct\',this.value)" placeholder="%" style="flex:1;">'+
+      '<button type="button" class="row-del" onclick="removeOtherFeeRow('+idx+')">×</button>'+
+      '</div>';
+  }).join('');
+}
+function clearSiteForm(){
+  ['siteName','siteFee','siteCouponFee','siteConsultFee','siteNote'].forEach(function(id){ document.getElementById(id).value=''; });
+  siteOtherFeeDraft=[];
+  renderOtherFeeRows();
+}
+function addSite(){
+  const name=document.getElementById('siteName').value.trim();
+  if(!name){ setStatus('siteStatus','サイト名を入力してください。','err'); return; }
+  const fee=toNum(document.getElementById('siteFee').value);
+  const couponFee=toNum(document.getElementById('siteCouponFee').value);
+  const consultFee=toNum(document.getElementById('siteConsultFee').value);
+  const note=document.getElementById('siteNote').value.trim();
+  const otherFees=siteOtherFeeDraft.filter(function(f){ return (f.desc&&f.desc.trim()!=='') || toNum(f.pct)!==null; })
+    .map(function(f){ return {desc:(f.desc||'').trim(), pct:toNum(f.pct)}; });
+  sites[name]={fee:fee, couponFee:couponFee, consultFee:consultFee, otherFees:otherFees, note:note};
+  saveSites();
+  setStatus('siteStatus','✅ サイト「'+name+'」を登録しました。','ok');
+  clearSiteForm();
+  renderSites();
+}
+function editSite(name){
+  const s=sites[name]; if(!s) return;
+  document.getElementById('siteName').value=name;
+  document.getElementById('siteFee').value=s.fee!=null?s.fee:'';
+  document.getElementById('siteCouponFee').value=s.couponFee!=null?s.couponFee:'';
+  document.getElementById('siteConsultFee').value=s.consultFee!=null?s.consultFee:'';
+  document.getElementById('siteNote').value=s.note||'';
+  siteOtherFeeDraft=JSON.parse(JSON.stringify(s.otherFees||[]));
+  renderOtherFeeRows();
+  setStatus('siteStatus','「'+name+'」を編集中です。内容を直して「このサイトを登録」で上書きされます。','ok');
+}
+function removeSite(name){ delete sites[name]; saveSites(); renderSites(); }
+function renderSites(){
+  const keys=Object.keys(sites);
+  const wrap=document.getElementById('siteTableWrap');
+  if(keys.length===0){ wrap.classList.add('hidden'); return; }
+  wrap.classList.remove('hidden');
+  document.getElementById('siteCount').textContent='登録済み '+keys.length+' 件';
+  document.getElementById('siteBody').innerHTML=keys.map(function(n){
+    const s=sites[n];
+    const others=(s.otherFees||[]).map(function(f){ return esc(f.desc||'')+' '+(f.pct!=null?f.pct+'%':''); }).join('<br>') || '—';
+    return '<tr>'+
+      '<td style="text-align:left;font-weight:700;">'+esc(n)+'</td>'+
+      '<td>'+(s.fee!=null?s.fee+'%':'—')+'</td>'+
+      '<td>'+(s.couponFee!=null?s.couponFee+'%':'—')+'</td>'+
+      '<td>'+(s.consultFee!=null?s.consultFee+'%':'—')+'</td>'+
+      '<td style="text-align:left;">'+others+'</td>'+
+      '<td style="text-align:left;">'+esc(s.note||'—')+'</td>'+
+      '<td style="white-space:nowrap;"><button class="mini" onclick="editSite(\''+jsEsc(n)+'\')">編集</button> '+
+      '<button class="del" onclick="removeSite(\''+jsEsc(n)+'\')">削除</button></td></tr>';
+  }).join('');
+}
+// 通常時(n)の全項目・全セットの明細を、対象区分(target: 's'/'c')へコピー
+function copyFromNormal(target){
+  if(!groupHasInput('n')){
+    setStatus('mStatus','先に「通常時」を入力してください。','err');
+    switchMode('normal'); return;
+  }
+  FIELDS.forEach(function(f){
+    for(let i=0;i<5;i++){
+      formData[target][f.key][i] = JSON.parse(JSON.stringify(formData['n'][f.key][i] || []));
+    }
+  });
+  refreshGroupCells(target);
+  const label = target==='s' ? 'SALE時' : 'SALE＋クーポン時';
+  setStatus('mStatus','✅ 通常時の入力を'+label+'にコピーしました。必要な箇所だけ修正してください。','ok');
+}
+
+/* ===== 区分データ生成（formData → group） ===== */
+function groupFromForm(pre){
+  const fields={}, lines={};
+  // 先に販売金額(税込)を5セット分算出（ポイント負担額の基準）
+  const priceTotals=[];
+  for(let i=0;i<5;i++){ const ls=formData[pre]['price'][i]||[]; priceTotals.push(ls.length?linesTotal(ls):0); }
+  // クーポン値引き後の販売金額(税込) 5セット分（手数料の基準）
+  const netTotals=[];
+  for(let i=0;i<5;i++){ netTotals.push(priceTotals[i] - linesTotal(formData[pre]['coupon'][i]||[])); }
+  FIELDS.forEach(function(f){
+    fields[f.key]=[]; lines[f.key]=[];
+    for(let i=0;i<5;i++){
+      const ls = formData[pre][f.key][i] || [];
+      lines[f.key].push(JSON.parse(JSON.stringify(ls)));
+      if(isPointField(f.key)){
+        fields[f.key].push(ls.length? r(priceTotals[i]*pointMultSum(ls)/100) : null);
+      } else if(isFeeField(f.key)){
+        fields[f.key].push(ls.length? r(feeTotal(netTotals[i], ls, 'incl')) : null);
+      } else {
+        fields[f.key].push(ls.length? linesTotal(ls) : null);
+      }
+    }
+  });
+  return finalizeGroup({fields:fields, lines:lines}, priceTaxRate());
+}
+// fields(税込合算[5])から prices, rates(税込/税抜), profits(税込/税抜) を確定。空セットは1セット踏襲。
+function finalizeGroup(g, pTax){
+  if(pTax==null) pTax=10;
+  FIELDS.forEach(function(f){
+    const arr=g.fields[f.key]; const v1=arr[0];
+    for(let i=0;i<5;i++){ if(arr[i]===null) arr[i]=v1; }
+    if(g.lines){ for(let i=0;i<5;i++){ if(!g.lines[f.key][i] || g.lines[f.key][i].length===0) g.lines[f.key][i]=JSON.parse(JSON.stringify(g.lines[f.key][0]||[])); } }
+  });
+  g.prices=g.fields.price.slice();
+  g.rates=[]; g.ratesEx=[]; g.profits=[]; g.profitsEx=[];
+  // 税抜の項目合計を算出するヘルパー（lines優先、なければ税込から概算）
+  function exTotal(fieldKey, i){
+    const ls = g.lines ? (g.lines[fieldKey][i]||[]) : [];
+    if(isPointField(fieldKey)){
+      const priceEx = g.lines ? linesExTotal(g.lines['price'][i]||[], pTax) : null;
+      return r((priceEx||0) * pointMultSum(ls) / 100);
+    }
+    if(isFeeField(fieldKey)){
+      const baseEx = g.lines ? (linesExTotal(g.lines['price'][i]||[], pTax) - linesExTotal(g.lines['coupon'][i]||[], COUPON_TAX)) : 0;
+      if(ls.length) return r(feeTotal(baseEx, ls, 'ex'));
+      const v=g.fields[fieldKey][i]; return v==null?0:v;
+    }
+    let rate=null;
+    if(fieldKey==='price') rate=pTax;
+    else if(fieldKey==='coupon') rate=COUPON_TAX;
+    if(ls.length) return linesExTotal(ls, rate);
+    const v=g.fields[fieldKey][i];
+    return v==null?0:v;
+  }
+  for(let i=0;i<5;i++){
+    const price=g.fields.price[i];
+    if(price===null||price<=0){ g.rates.push(null); g.ratesEx.push(null); g.profits.push(null); g.profitsEx.push(null); continue; }
+    let deduct=0; DEDUCT_KEYS.forEach(function(k){ const v=g.fields[k][i]; if(v!==null) deduct+=v; });
+    const profit=r(price-deduct);
+    g.profits.push(profit);
+    g.rates.push(profit/price*100);
+    // 税抜
+    const priceEx=exTotal('price',i);
+    let deductEx=0; DEDUCT_KEYS.forEach(function(k){ deductEx+=exTotal(k,i); });
+    const profitEx=r(priceEx-deductEx);
+    g.profitsEx.push(profitEx);
+    g.ratesEx.push(priceEx>0?(profitEx/priceEx*100):null);
+  }
+  return g;
+}
+function groupHasInput(pre){ return (formData[pre].price[0]||[]).length>0; }
+function cloneGroup(src){
+  const fields={}, lines={};
+  FIELDS.forEach(function(f){ fields[f.key]=src.fields[f.key].slice(); lines[f.key]=src.lines?JSON.parse(JSON.stringify(src.lines[f.key])):[[],[],[],[],[]]; });
+  return {fields:fields, lines:lines, prices:src.prices.slice(), rates:src.rates.slice(),
+    ratesEx:(src.ratesEx||[]).slice(), profits:(src.profits||[]).slice(), profitsEx:(src.profitsEx||[]).slice()};
+}
+
+/* ===== 固有ID採番（A0001〜） ===== */
+function nextProductId(){
+  let maxN=0;
+  Object.keys(master).forEach(function(c){
+    const id=master[c].id||'';
+    const mt=/^A(\d+)$/.exec(id);
+    if(mt){ const n=parseInt(mt[1],10); if(n>maxN) maxN=n; }
+  });
+  return 'A'+String(maxN+1).padStart(4,'0');
+}
+
+/* ===== ② 登録 ===== */
+function addMaster(){
+  const code=document.getElementById('mCode').value.trim();
+  const name=document.getElementById('mName').value.trim();
+  const spec=document.getElementById('mSpec').value.trim();
+  const note=document.getElementById('mNote').value.trim();
+  const category=document.getElementById('mCategory').value;
+  if(!code){ setStatus('mStatus','商品コードを入力してください。','err'); return; }
+  if(!groupHasInput('n')){
+    setStatus('mStatus','「通常時」1セットの販売金額を入力してください（マスをタップして明細入力）。','err');
+    switchMode('normal'); return;
+  }
+  const normal=groupFromForm('n');
+  const sale=groupHasInput('s')?groupFromForm('s'):cloneGroup(normal);
+  const coupon=groupHasInput('c')?groupFromForm('c'):cloneGroup(sale);
+  // 既存コードなら既存IDを維持、新規なら採番
+  const id = (master[code] && master[code].id) ? master[code].id : nextProductId();
+  master[code]={id:id,code:code,name:name,spec:spec,note:note,category:category,priceTax:priceTaxRate(),setCount:getSetCount(),normal:normal,sale:sale,coupon:coupon};
+  saveMaster();
+  setStatus('mStatus','✅ '+id+' / '+code+(name?'（'+name+'）':'')+' を登録しました。「②商品一覧」で確認できます。','ok');
+  clearForm();
+  renderMaster();
+}
+function clearForm(){
+  ['mCode','mName','mSpec','mNote'].forEach(function(id){ document.getElementById(id).value=''; });
+  document.getElementById('mCategory').selectedIndex=0;
+  document.getElementById('mPriceTax').value='10';
+  document.getElementById('mSetCount').value='5';
+  applySetCount();
+  initFormData();
+  refreshAllCells();
+  switchMode('normal');
+}
+function removeMaster(code){ delete master[code]; saveMaster(); renderMaster(); }
+// 商品の保存内容を②のフォームに読み込む（編集/複製の共通処理）
+function loadIntoForm(m){
+  initFormData();
+  const map={normal:'n', sale:'s', coupon:'c'};
+  GROUPS.forEach(function(g){
+    const pre=map[g];
+    const grp=m[g]||{};
+    const lines=grp.lines||{};
+    FIELDS.forEach(function(f){
+      for(let i=0;i<5;i++){
+        const ls=(lines[f.key] && lines[f.key][i]) ? JSON.parse(JSON.stringify(lines[f.key][i])) : [];
+        formData[pre][f.key][i]=ls;
+      }
+    });
+  });
+  document.getElementById('mCategory').value = m.category||'その他';
+  document.getElementById('mPriceTax').value = String(m.priceTax!=null?m.priceTax:10);
+  document.getElementById('mSetCount').value = String(m.setCount!=null?m.setCount:5);
+  document.getElementById('mName').value = m.name||'';
+  document.getElementById('mSpec').value = m.spec||'';
+  document.getElementById('mNote').value = m.note||'';
+  refreshAllCells();
+  // 直接入力セル（販売金額・クーポン）の表示も同期
+  ['n','s','c'].forEach(function(pre){ DIRECT_FIELDS.forEach(function(fk){ for(let i=0;i<5;i++) refreshCell(pre,fk,i); }); });
+  switchMode('normal');
+  showPane(2);
+}
+function editMaster(code){
+  const m=master[code]; if(!m) return;
+  loadIntoForm(m);
+  document.getElementById('mCode').value = code; // 同じコードで上書き保存（IDも維持）
+  setStatus('mStatus','「'+ (m.id||'') +' / '+code+'」を編集中です。修正して「この商品を登録」で上書きされます。','ok');
+}
+function duplicateMaster(code){
+  const m=master[code]; if(!m) return;
+  loadIntoForm(m);
+  document.getElementById('mCode').value = code+'_copy'; // 別コードで新規登録（新IDが付与）
+  setStatus('mStatus','「'+code+'」を複製しました。商品コードを変更して「この商品を登録」を押すと新規登録されます。','ok');
+}
+function renderMaster(){
+  const keys=Object.keys(master);
+  const wrap=document.getElementById('masterTableWrap');
+  const empty=document.getElementById('emptyMaster');
+  if(keys.length===0){ wrap.classList.add('hidden'); empty.classList.remove('hidden'); return; }
+  empty.classList.add('hidden'); wrap.classList.remove('hidden');
+  // ID順に並べる
+  const sorted=keys.slice().sort(function(a,b){
+    const ia=master[a].id||'', ib=master[b].id||'';
+    return ia<ib?-1:(ia>ib?1:0);
+  });
+  // 検索フィルタ
+  const sb=document.getElementById('searchBox');
+  const q=sb?sb.value.trim().toLowerCase():'';
+  const shown=sorted.filter(function(c){
+    if(!q) return true;
+    const m=master[c];
+    const hay=[(m.id||''),(m.category||''),(c||''),(m.name||''),(m.spec||'')].join(' ').toLowerCase();
+    return hay.indexOf(q)!==-1;
+  });
+  document.getElementById('masterCount').textContent =
+    '登録済み '+keys.length+' 件'+(q?'（表示 '+shown.length+' 件）':'');
+  let html='';
+  shown.forEach(function(c){
+    const m=master[c];
+    html+=summaryRow(m);
+    html+=detailRow(m);
+  });
+  document.getElementById('masterBody').innerHTML=html;
+}
+function summaryRow(m){
+  const c=m.code;
+  return '<tr>'+
+    '<td class="code">'+esc(m.id||'—')+'</td>'+
+    '<td style="text-align:left;">'+esc(m.category||'—')+'</td>'+
+    '<td class="code">'+esc(c)+'</td>'+
+    '<td style="text-align:left;">'+esc(m.name||'—')+'</td>'+
+    '<td style="text-align:left;">'+esc(m.spec||'—')+'</td>'+
+    '<td style="text-align:left;white-space:nowrap;">'+
+      '<button class="mini" onclick="toggleDetail(\''+jsEsc(c)+'\')" id="detbtn_'+cssId(c)+'">詳細</button> '+
+      '<button class="mini" onclick="editMaster(\''+jsEsc(c)+'\')">編集</button> '+
+      '<button class="mini" onclick="duplicateMaster(\''+jsEsc(c)+'\')">複製</button> '+
+      '<button class="del" onclick="removeMaster(\''+jsEsc(c)+'\')">削除</button>'+
+    '</td>'+
+    '</tr>';
+}
+function detailRow(m){
+  const c=m.code; const cid=cssId(c);
+  let inner='<div class="detail-ctrl">表示する数値：'+
+    '<select onchange="renderDetailTable(\''+jsEsc(c)+'\',this.value)">'+
+    '<option value="rates">粗利率(税込)</option>'+
+    '<option value="ratesEx">粗利率(税抜)</option>'+
+    '<option value="profits">粗利額(税込)</option>'+
+    '<option value="profitsEx">粗利額(税抜)</option>'+
+    '</select></div>';
+  inner+='<div id="dettbl_'+cid+'">'+detailTableHtml(m,'rates')+'</div>';
+  if(m.note){ inner+='<div class="detail-note">備考：'+esc(m.note)+'</div>'; }
+  return '<tr class="detail-row hidden" id="detrow_'+cid+'"><td colspan="6">'+inner+'</td></tr>';
+}
+function detailTableHtml(m, metric){
+  const isRate = (metric==='rates'||metric==='ratesEx');
+  const n = m.setCount!=null?m.setCount:5;
+  let cols=''; for(let k=1;k<=n;k++) cols+='<th>'+k+'set</th>';
+  let h='<table class="detail-table"><thead><tr><th>区分</th><th>販売金額</th>'+cols+'</tr></thead><tbody>';
+  GROUPS.forEach(function(g){
+    const arr = m[g][metric] || [];
+    const prices = m[g].prices || [];
+    const p1 = prices[0];
+    const priceCell = (p1==null) ? '—' : '¥'+Math.round(p1).toLocaleString();
+    let cells='';
+    for(let k=0;k<n;k++){
+      const v=arr[k];
+      cells += (v==null) ? '<td>—</td>' : '<td>'+(isRate ? (v.toFixed(1)+'%') : ('¥'+Math.round(v).toLocaleString()))+'</td>';
+    }
+    h+='<tr><td style="text-align:left;color:'+GROUP_COLOR[g]+';font-weight:700;">'+GROUP_LABEL[g]+'</td>'+
+      '<td>'+priceCell+'</td>'+cells+'</tr>';
+  });
+  h+='</tbody></table>';
+  return h;
+}
+function renderDetailTable(code, metric){
+  const m=master[code]; if(!m) return;
+  const box=document.getElementById('dettbl_'+cssId(code));
+  if(box) box.innerHTML=detailTableHtml(m, metric);
+}
+function cssId(code){ return String(code).replace(/[^a-zA-Z0-9_-]/g,'_'); }
+function toggleDetail(code){
+  const row=document.getElementById('detrow_'+cssId(code));
+  const btn=document.getElementById('detbtn_'+cssId(code));
+  if(!row) return;
+  const hidden=row.classList.toggle('hidden');
+  if(btn) btn.textContent = hidden ? '詳細' : '閉じる';
+}
+
+/* ===== マスターCSV（明細をJSONで1セルに格納） ===== */
+function exportMaster(){
+  const head=['固有ID','商品コード','商品名','規格','備考','カテゴリ','販売税率','区分'];
+  FIELDS.forEach(function(f){ for(let i=1;i<=5;i++) head.push(f.label+i+'set'); });
+  for(let i=1;i<=5;i++) head.push('粗利率'+i+'set');
+  head.push('明細JSON');
+  const rows=[head];
+  Object.keys(master).forEach(function(c){
+    const m=master[c];
+    GROUPS.forEach(function(g){
+      const grp=m[g];
+      let row=[m.id||'',c,m.name,m.spec||'',m.note||'',m.category||'',(m.priceTax!=null?m.priceTax:10),GROUP_LABEL[g]];
+      FIELDS.forEach(function(f){ row=row.concat(grp.fields[f.key].map(function(v){return v==null?'':Math.round(v);})); });
+      row=row.concat(grp.rates.map(function(r){return r==null?'':Number(r).toFixed(1);}));
+      row.push(JSON.stringify(grp.lines||{}));
+      rows.push(row);
+    });
+  });
+  downloadCSV(rows,'MQ率_商品マスター.csv');
+}
+function classifyKind(text){
+  const s=String(text||'').toLowerCase();
+  if(s.indexOf('クーポン')!==-1||s.indexOf('coupon')!==-1) return 'coupon';
+  if(s.indexOf('sale')!==-1||s.indexOf('セール')!==-1) return 'sale';
+  return 'normal';
+}
+function importMaster(e){
+  readFile(e,function(text){
+    const lines=splitLines(text);
+    const header=parseCSVLine(lines[0]).map(function(h){return h.trim();});
+    const idIdx=header.indexOf('固有ID');
+    let codeIdx=header.indexOf('商品コード'); if(codeIdx===-1) codeIdx=(idIdx===0?1:0);
+    let nameIdx=header.indexOf('商品名'); if(nameIdx===-1) nameIdx=codeIdx+1;
+    const specIdx=header.indexOf('規格');
+    const noteIdx=header.indexOf('備考');
+    const catIdx=header.indexOf('カテゴリ');
+    const ptaxIdx=header.indexOf('販売税率');
+    const kindIdx=header.indexOf('区分');
+    const jsonIdx=header.indexOf('明細JSON');
+    let base=header.indexOf('販売金額1set');
+    if(base===-1) base=(kindIdx!==-1?kindIdx+1:(catIdx!==-1?catIdx+1:2));
+    const hasKindCol = kindIdx!==-1;
+    const isFull = header.join(',').indexOf('商品原価')!==-1;
+    const next={};
+    for(let i=1;i<lines.length;i++){
+      const cols=parseCSVLine(lines[i]);
+      const code=(cols[codeIdx]||'').trim(); if(!code) continue;
+      const name=(cols[nameIdx]||'').trim();
+      const id=idIdx!==-1?(cols[idIdx]||'').trim():'';
+      const spec=specIdx!==-1?(cols[specIdx]||'').trim():'';
+      const note=noteIdx!==-1?(cols[noteIdx]||'').trim():'';
+      const category=catIdx!==-1?(cols[catIdx]||'').trim():'';
+      const kind=hasKindCol?classifyKind(cols[kindIdx]):'normal';
+      const fields={}; FIELDS.forEach(function(f){ fields[f.key]=[null,null,null,null,null]; });
+      let lines2=null;
+      if(isFull){
+        let col=base;
+        FIELDS.forEach(function(f){ for(let k=0;k<5;k++){ fields[f.key][k]=toNum(cols[col++]); } });
+        if(jsonIdx!==-1 && cols[jsonIdx]){ try{ lines2=JSON.parse(cols[jsonIdx]); }catch(_){ lines2=null; } }
+      } else {
+        for(let k=0;k<5;k++){ fields.price[k]=toNum(cols[base+k]); }
+      }
+      if(!next[code]) next[code]={id:id,code:code,name:name,spec:spec,note:note,category:category||'その他',priceTax:(ptaxIdx!==-1?(toNum(cols[ptaxIdx])!=null?toNum(cols[ptaxIdx]):10):10),normal:null,sale:null,coupon:null};
+      if(id) next[code].id=id;
+      if(spec) next[code].spec=spec;
+      if(note) next[code].note=note;
+      if(category) next[code].category=category;
+      if(ptaxIdx!==-1 && toNum(cols[ptaxIdx])!=null) next[code].priceTax=toNum(cols[ptaxIdx]);
+      const g={fields:fields, lines:lines2};
+      if(!isFull){
+        const rs=base+5; const rates=[]; for(let k=0;k<5;k++) rates.push(toNum(cols[rs+k]));
+        g._directRates=rates;
+      }
+      next[code][kind]=g;
+    }
+    Object.keys(next).forEach(function(c){
+      const m=next[c];
+      const pt = (m.priceTax!=null?m.priceTax:10);
+      ['normal','sale','coupon'].forEach(function(k){
+        if(m[k]){
+          if(!m[k].lines){ m[k].lines={}; FIELDS.forEach(function(f){ m[k].lines[f.key]=[[],[],[],[],[]]; }); }
+          if(m[k]._directRates){
+            finalizeGroup(m[k], pt); m[k].rates=m[k]._directRates.map(function(r){return r==null?(m[k]._directRates[0]):r;}); delete m[k]._directRates;
+          } else { finalizeGroup(m[k], pt); }
+        }
+      });
+      if(!m.normal){ m.normal=finalizeGroup({fields:emptyFields(),lines:emptyLines()}, pt); }
+      if(!m.sale){ m.sale=cloneGroup(m.normal); }
+      if(!m.coupon){ m.coupon=cloneGroup(m.sale); }
+    });
+    master=next;
+    // IDが無い商品にA0001〜で採番（既存IDの最大値の続きから）
+    let maxN=0;
+    Object.keys(master).forEach(function(c){ const mt=/^A(\d+)$/.exec(master[c].id||''); if(mt){ const n=parseInt(mt[1],10); if(n>maxN) maxN=n; } });
+    Object.keys(master).forEach(function(c){ if(!/^A\d+$/.test(master[c].id||'')){ maxN++; master[c].id='A'+String(maxN).padStart(4,'0'); } });
+    saveMaster();
+    renderMaster();
+    setStatus('listStatus','✅ 商品マスターCSVから '+Object.keys(next).length+' 件読み込みました。','ok');
+  });
+}
+function emptyFields(){ const f={}; FIELDS.forEach(function(x){ f[x.key]=[null,null,null,null,null]; }); return f; }
+function emptyLines(){ const l={}; FIELDS.forEach(function(x){ l[x.key]=[[],[],[],[],[]]; }); return l; }
+
+/* ===== ③ 受注CSV ===== */
+function loadOrderCSV(e){
+  readFile(e,function(text){
+    const lines=splitLines(text);
+    if(lines.length<2){ setStatus('orderStatus','データ行が見つかりません。','err'); return; }
+    rawHeader=parseCSVLine(lines[0]).map(function(h){return h.trim();});
+    rawRows=[];
+    for(let i=1;i<lines.length;i++){ if(lines[i].trim()==='') continue; rawRows.push(parseCSVLine(lines[i])); }
+    buildColumnSelectors();
+    document.getElementById('mapArea').classList.remove('hidden');
+    setStatus('orderStatus','読み込みました（'+rawRows.length+'行）。列を選んで集計してください。','ok');
+  });
+}
+function buildColumnSelectors(){
+  const sample = rawRows.length>0 ? rawRows[0] : [];
+  const opts=rawHeader.map(function(h,i){
+    const name = (h && String(h).trim()!=='') ? String(h).trim() : '(無題)';
+    const ex = (sample[i]!=null && String(sample[i]).trim()!=='') ? ' 例:'+String(sample[i]).slice(0,12) : '';
+    return '<option value="'+i+'">列'+(i+1)+'：'+esc(name)+esc(ex)+'</option>';
+  }).join('');
+  ['colDate','colCode','colAmount','colQty','colSale','colUnit'].forEach(function(id){ document.getElementById(id).innerHTML=opts; });
+  guessSelect('colDate',['受注日','注文日','日付','date','order']);
+  guessSelect('colCode',['商品コード','コード','sku','code']);
+  guessSelect('colAmount',['支払い金額','支払金額','支払','金額','売上','amount','price','total']);
+  guessSelect('colQty',['数量','個数','点数','セット','qty','quantity','count']);
+  guessSelect('colSale',['クーポン','coupon','sale','セール','割引','区分','キャンペーン']);
+  guessSelect('colUnit',['単価','unit price','unitprice']);
+  // 全モール共通フォーマット：受注日時=5列目・商品コード=10列目・単価=12列目・数量=13列目 を固定で優先適用
+  if(rawHeader.length>=13){
+    document.getElementById('colDate').value=4;
+    document.getElementById('colCode').value=9;
+    document.getElementById('colUnit').value=11;
+    document.getElementById('colQty').value=12;
+    document.getElementById('saleMode').value='by_price';
+    onSaleModeChange();
+  }
+}
+function guessSelect(id,keys){
+  for(let i=0;i<rawHeader.length;i++){
+    const h=rawHeader[i].toLowerCase().replace(/\s/g,'');
+    for(const k of keys){ if(h.indexOf(k.toLowerCase())!==-1){ document.getElementById(id).value=i; return; } }
+  }
+}
+function matchKindByPrice(code, unitPrice){
+  const m=master[code]; if(!m) return null;
+  const cands={normal:m.normal.prices[0], sale:m.sale.prices[0], coupon:m.coupon.prices[0]};
+  let best=null, bestDiff=Infinity;
+  Object.keys(cands).forEach(function(k){
+    const p=cands[k]; if(p==null) return;
+    const diff=Math.abs(p-unitPrice);
+    if(diff<bestDiff){ bestDiff=diff; best=k; }
+  });
+  return best;
+}
+function processOrders(){
+  if(Object.keys(master).length===0){ setStatus('orderStatus','先に「①商品登録」で商品を登録してください。','err'); return; }
+  const di=+document.getElementById('colDate').value, ci=+document.getElementById('colCode').value;
+  const ai=+document.getElementById('colAmount').value, qi=+document.getElementById('colQty').value;
+  const saleMode=document.getElementById('saleMode').value, si=+document.getElementById('colSale').value;
+  const ui=+document.getElementById('colUnit').value;
+  const daily={}, product={}, category={}; let totalSales=0,totalProfit=0,matched=0; const missing={}; let priceMismatch=0;
+  const byKind={normal:{profit:0,count:0,sales:0}, sale:{profit:0,count:0,sales:0}, coupon:{profit:0,count:0,sales:0}};
+  rawRows.forEach(function(row){
+    const date=(row[di]||'').trim(); const code=(row[ci]||'').trim();
+    let qty=toNum(row[qi]); if(qty===null||qty<1) qty=1; qty=Math.round(qty);
+    let amount, kind;
+    if(saleMode==='by_price'){
+      const unitPrice=toNum(row[ui]);
+      if(!code||unitPrice===null) return;
+      if(!(code in master)){ missing[code]=(missing[code]||0)+1; return; }
+      kind=matchKindByPrice(code, unitPrice);
+      if(kind===null){ priceMismatch++; return; } // 価格候補が登録されておらず判定不能
+      amount = unitPrice * qty;
+    } else {
+      amount=toNum(row[ai]);
+      if(!code||amount===null) return;
+      if(!(code in master)){ missing[code]=(missing[code]||0)+1; return; }
+      if(saleMode==='all_normal') kind='normal'; else if(saleMode==='all_sale') kind='sale';
+      else if(saleMode==='all_coupon') kind='coupon'; else kind=classifyKind(row[si]);
+    }
+    const grp=master[code][kind]; const idx=Math.min(qty,5)-1; const rate=grp.rates[idx];
+    if(rate==null) return;
+    const profit=amount*rate/100; matched++;
+    if(!daily[date]) daily[date]={sales:0,profit:0,count:0};
+    daily[date].sales+=amount; daily[date].profit+=profit; daily[date].count++;
+    if(!product[code]) product[code]={sales:0,profit:0,count:0,name:master[code].name,category:master[code].category||'その他'};
+    product[code].sales+=amount; product[code].profit+=profit; product[code].count++;
+    const cat=master[code].category||'その他';
+    if(!category[cat]) category[cat]={sales:0,profit:0,count:0};
+    category[cat].sales+=amount; category[cat].profit+=profit; category[cat].count++;
+    byKind[kind].profit+=profit; byKind[kind].sales+=amount; byKind[kind].count++;
+    totalSales+=amount; totalProfit+=profit;
+  });
+  lastResult={daily,product,category,byKind,totalSales,totalProfit,missing,matched};
+  renderResult();
+  const missCount=Object.keys(missing).length;
+  let msg='✅ '+matched+'件を集計しました。下に結果を表示しています。';
+  if(missCount>0) msg+=' （未登録の商品コードが'+missCount+'種類あり除外）';
+  if(priceMismatch>0) msg+=' （単価が価格候補と一致せず判定できなかった行が'+priceMismatch+'件あり除外）';
+  setStatus('orderStatus',msg,(missCount>0||priceMismatch>0)?'err':'ok');
+}
+function renderResult(){
+  const r=lastResult;
+  document.getElementById('resultBody').classList.remove('hidden');
+  const totalRate=r.totalSales>0?(r.totalProfit/r.totalSales*100):0;
+  document.getElementById('totalRate').textContent=totalRate.toFixed(1)+'%';
+  document.getElementById('totalDetail').innerHTML=
+    '売上計 '+yen(r.totalSales)+' ／ 粗利計 '+yen(r.totalProfit)+' ／ '+r.matched+'件'+
+    '<div style="margin-top:8px;font-size:13px;line-height:1.8;">'+
+    '<span style="color:var(--accent);font-weight:700;">通常時粗利</span> '+yen(r.byKind.normal.profit)+' （'+r.byKind.normal.count+'件）<br>'+
+    '<span style="color:var(--sale);font-weight:700;">SALE時粗利</span> '+yen(r.byKind.sale.profit)+' （'+r.byKind.sale.count+'件）<br>'+
+    '<span style="color:var(--coupon);font-weight:700;">SALE＋クーポン時粗利</span> '+yen(r.byKind.coupon.profit)+' （'+r.byKind.coupon.count+'件）'+
+    '</div>';
+  const missKeys=Object.keys(r.missing); const warn=document.getElementById('totalWarn');
+  if(missKeys.length>0){ warn.classList.remove('hidden'); warn.textContent='⚠ 粗利率が未登録のため除外: '+missKeys.slice(0,10).join(', ')+(missKeys.length>10?' ほか':''); }
+  else warn.classList.add('hidden');
+  const dates=Object.keys(r.daily).sort();
+  document.getElementById('dailyWrap').innerHTML=dates.map(function(d){
+    const x=r.daily[d]; const rate=x.sales>0?(x.profit/x.sales*100):0;
+    return '<div class="day-block"><div class="day-head"><div class="day-date">'+esc(d||'(日付なし)')+'</div>'+
+      '<div class="day-rate">'+rate.toFixed(1)+'%</div></div>'+
+      '<div class="day-detail">売上 '+yen(x.sales)+' ／ 粗利 '+yen(x.profit)+' ／ '+x.count+'件</div></div>';
+  }).join('');
+  const catOrder=['青果','精肉・肉加工品','魚介・水産加工品','雑穀米','米','惣菜・調味料','水・ソフトドリンク','お菓子・パン','その他'];
+  const catKeys=catOrder.filter(function(k){return r.category[k];});
+  document.getElementById('categoryBody').innerHTML=catKeys.map(function(k){
+    const x=r.category[k]; const rate=x.sales>0?(x.profit/x.sales*100):0;
+    return '<tr><td class="code">'+esc(k)+'</td><td>'+x.count+'</td><td>'+yen(x.sales)+'</td><td>'+yen(x.profit)+'</td><td>'+rate.toFixed(1)+'%</td></tr>';
+  }).join('');
+  const codes=Object.keys(r.product).sort(function(a,b){return r.product[b].profit-r.product[a].profit;});
+  document.getElementById('productBody').innerHTML=codes.map(function(c){
+    const x=r.product[c]; const rate=x.sales>0?(x.profit/x.sales*100):0;
+    return '<tr><td style="text-align:left;">'+esc(x.category||'—')+'</td><td class="code">'+esc(c)+'</td>'+
+      '<td style="text-align:left;">'+esc(x.name||'—')+'</td><td>'+x.count+'</td><td>'+yen(x.sales)+'</td><td>'+yen(x.profit)+'</td><td>'+rate.toFixed(1)+'%</td></tr>';
+  }).join('');
+}
+function exportResult(){
+  if(!lastResult) return; const r=lastResult;
+  const rows=[['区分','キー','カテゴリ／商品名','件数','売上計','粗利計','粗利率(%)']];
+  Object.keys(r.daily).sort().forEach(function(d){ const x=r.daily[d]; const rate=x.sales>0?(x.profit/x.sales*100):0;
+    rows.push(['単日',d,'',x.count,Math.round(x.sales),Math.round(x.profit),rate.toFixed(1)]); });
+  Object.keys(r.category).forEach(function(k){ const x=r.category[k]; const rate=x.sales>0?(x.profit/x.sales*100):0;
+    rows.push(['カテゴリ',k,'',x.count,Math.round(x.sales),Math.round(x.profit),rate.toFixed(1)]); });
+  Object.keys(r.product).forEach(function(c){ const x=r.product[c]; const rate=x.sales>0?(x.profit/x.sales*100):0;
+    rows.push(['商品',c,(x.category||'')+' / '+(x.name||''),x.count,Math.round(x.sales),Math.round(x.profit),rate.toFixed(1)]); });
+  const tRate=r.totalSales>0?(r.totalProfit/r.totalSales*100):0;
+  rows.push(['合計','全期間','',r.matched,Math.round(r.totalSales),Math.round(r.totalProfit),tRate.toFixed(1)]);
+  if(r.byKind){
+    const kl={normal:'通常時',sale:'SALE時',coupon:'SALE＋クーポン時'};
+    ['normal','sale','coupon'].forEach(function(k){
+      const x=r.byKind[k]; const rate=x.sales>0?(x.profit/x.sales*100):0;
+      rows.push(['区分別',kl[k],'',x.count,Math.round(x.sales),Math.round(x.profit),rate.toFixed(1)]);
+    });
+  }
+  downloadCSV(rows,'MQ率_集計結果.csv');
+}
+
+/* ===== ユーティリティ ===== */
+function setStatus(id,text,type){ const el=document.getElementById(id); el.className='status '+(type==='ok'?'ok':'err'); el.textContent=text; }
+function toNum(v){ if(v==null||String(v).trim()==='') return null; const n=parseFloat(String(v).replace(/[^0-9.\-]/g,'')); return isNaN(n)?null:n; }
+function yen(n){ return '¥'+Math.round(n).toLocaleString(); }
+function esc(s){ return String(s).replace(/[&<>"]/g,function(c){return{'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c];}); }
+function escAttr(s){ return String(s).replace(/"/g,'&quot;'); }
+function jsEsc(s){ return String(s).replace(/\\/g,'\\\\').replace(/'/g,"\\'"); }
+function splitLines(t){ return t.replace(/^\uFEFF/,'').split(/\r?\n/).filter(function(l){return l.trim()!=='';}); }
+function parseCSVLine(line){
+  const out=[]; let cur=''; let inQ=false;
+  for(let i=0;i<line.length;i++){ const ch=line[i];
+    if(inQ){ if(ch==='"'&&line[i+1]==='"'){cur+='"';i++;} else if(ch==='"'){inQ=false;} else cur+=ch; }
+    else { if(ch==='"') inQ=true; else if(ch===','){ out.push(cur); cur=''; } else cur+=ch; } }
+  out.push(cur); return out;
+}
+function downloadCSV(rows,filename){
+  const csv=rows.map(function(r){ return r.map(function(c){ return '"'+String(c).replace(/"/g,'""')+'"'; }).join(','); }).join('\n');
+  const blob=new Blob(['\uFEFF'+csv],{type:'text/csv;charset=utf-8;'});
+  const url=URL.createObjectURL(blob); const a=document.createElement('a'); a.href=url; a.download=filename; a.click(); URL.revokeObjectURL(url);
+}
+function decodeBuffer(buf){
+  const bytes=new Uint8Array(buf);
+  // BOMでUTF-8判定
+  if(bytes.length>=3 && bytes[0]===0xEF && bytes[1]===0xBB && bytes[2]===0xBF){
+    return new TextDecoder('utf-8').decode(bytes);
+  }
+  // UTF-8として読み、文字化け(置換文字)が出たらShift_JISで読み直す
+  let utf8='';
+  try{ utf8=new TextDecoder('utf-8',{fatal:false}).decode(bytes); }catch(e){ utf8=''; }
+  if(utf8.indexOf('\uFFFD')!==-1){
+    try{ return new TextDecoder('shift_jis').decode(bytes); }
+    catch(e){
+      try{ return new TextDecoder('shift-jis').decode(bytes); }catch(e2){ return utf8; }
+    }
+  }
+  return utf8;
+}
+function readFile(e,cb){
+  const file=e.target.files&&e.target.files[0]; if(!file) return;
+  const reader=new FileReader();
+  reader.onload=function(ev){ cb(decodeBuffer(ev.target.result)); };
+  reader.readAsArrayBuffer(file);
+  e.target.value='';
+}
+
+/* ===== 自動保存（ブラウザ内に保存） ===== */
+const STORAGE_KEY = 'mqApp_master_v1';
+function saveMaster(){
+  try{ localStorage.setItem(STORAGE_KEY, JSON.stringify(master)); }
+  catch(e){ /* 保存できない環境では無視 */ }
+}
+function loadSavedMaster(){
+  try{
+    const s = localStorage.getItem(STORAGE_KEY);
+    if(!s) return false;
+    const obj = JSON.parse(s);
+    if(obj && typeof obj==='object'){
+      master = obj;
+      // 旧データに税抜率・粗利額が無ければ再計算して補完
+      Object.keys(master).forEach(function(c){
+        const m=master[c]; const pt=(m.priceTax!=null?m.priceTax:10);
+        ['normal','sale','coupon'].forEach(function(k){
+          if(m[k] && (!m[k].ratesEx || !m[k].profits)){ finalizeGroup(m[k], pt); }
+        });
+      });
+      return true;
+    }
+  }catch(e){}
+  return false;
+}
+function clearAllData(){
+  if(!confirm('登録した全商品データを削除します。よろしいですか？（CSVに保存していないデータは元に戻せません）')) return;
+  master = {};
+  try{ localStorage.removeItem(STORAGE_KEY); }catch(e){}
+  renderMaster();
+  setStatus('listStatus','全データを削除しました。','ok');
+}
+
+/* 初期化 */
+buildInputTables();
+if(loadSavedMaster()){
+  renderMaster();
+  setStatus('listStatus','✅ 前回保存したデータを自動で読み込みました（'+Object.keys(master).length+'件）。','ok');
+}
+loadSavedSites();
+loadSavedShips();
+loadSavedMats();
+</script>
+</body>
+</html>

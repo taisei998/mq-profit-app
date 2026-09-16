@@ -1,0 +1,27 @@
+node_modules/
+dist/
+build/
+*.log
+
+# secrets
+.env
+.env.local
+!.env.example
+
+# SQLite local dev DB
+packages/server/prisma/dev.db
+packages/server/prisma/dev.db-journal
+
+# BSRバッチ: Googleサービスアカウントの秘密鍵は絶対にコミットしない
+packages/bsr/google-service-account.json
+packages/bsr/logs/
+packages/bsr/*.json.key
+
+# 検索順位バッチ: 追跡キーワードは各社の設定なのでコミットしない
+packages/bsr/rank-targets.json
+!packages/bsr/rank-targets.example.json
+
+# editor / OS
+.vscode/
+.DS_Store
+Thumbs.db

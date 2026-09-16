@@ -1,0 +1,36 @@
+{
+  "name": "ec-ai",
+  "private": true,
+  "version": "0.1.0",
+  "workspaces": [
+    "packages/shared",
+    "packages/server",
+    "packages/client",
+    "packages/bsr"
+  ],
+  "scripts": {
+    "dev": "concurrently -n server,client -c blue,green \"npm run dev --workspace=packages/server\" \"npm run dev --workspace=packages/client\"",
+    "dev:server": "npm run dev --workspace=packages/server",
+    "dev:client": "npm run dev --workspace=packages/client",
+    "build": "npm run build --workspace=packages/shared && npm run build --workspace=packages/server && npm run build --workspace=packages/client && npm run build --workspace=packages/bsr",
+    "db:migrate": "npm run db:migrate --workspace=packages/server",
+    "db:seed": "npm run db:seed --workspace=packages/server",
+    "db:studio": "npm run db:studio --workspace=packages/server",
+    "test": "npm run test --workspace=packages/shared && npm run test --workspace=packages/bsr",
+    "bsr:collect": "npm run collect --workspace=packages/bsr",
+    "bsr:check": "npm run check --workspace=packages/bsr",
+    "rank:init": "npm run rank:init --workspace=packages/bsr",
+    "rank:collect": "npm run rank:collect --workspace=packages/bsr",
+    "rank:check": "npm run rank:check --workspace=packages/bsr"
+  },
+  "devDependencies": {
+    "concurrently": "^9.1.0"
+  },
+  "allowScripts": {
+    "@prisma/client@5.22.0": true,
+    "@prisma/engines@5.22.0": true,
+    "esbuild@0.28.2": true,
+    "esbuild@0.21.5": true,
+    "prisma@5.22.0": true
+  }
+}

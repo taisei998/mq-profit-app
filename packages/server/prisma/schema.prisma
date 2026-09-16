@@ -1,0 +1,188 @@
+// Prisma schema
+//
+// 開発時は SQLite（インストール不要・ファイル1つ）を使っています。
+// データ量が増えて PostgreSQL / MariaDB(MySQL互換) に切り替える場合は、
+//   1) 下の datasource の provider を "postgresql" または "mysql" に変更
+//   2) .env の DATABASE_URL を接続先に変更
+//   3) `npm run db:migrate --workspace=packages/server` を再実行
+// だけで移行できます。
+//
+// 注意: SQLiteはPrismaのJson型に対応していないため、明細データは
+// String列にJSON文字列として保存し、アプリ側(src/lib/json.ts)でパースしています。
+// これは3DBすべてで確実に動く最も互換性の高い持たせ方です。
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+// 商品マスタ（①商品登録／②商品一覧に対応）
+// 通常時・SALE時・SALE+クーポン時の3区分ぶんの計算結果(価格・粗利率・明細)を
+// JSON文字列としてそのまま保存する。明細の項目構成が商品ごとに柔軟なため、
+// 全項目を正規化せずJSONで保持する設計は元アプリのCSV出力形式を踏襲している。
+model Product {
+  id           String   @id @default(cuid())
+  productId    String   @unique // 固有ID (例: A0001)。アプリが自動採番する
+  mgmtNo       String? // 管理番号（例: MZ0001）。社内で振る番号で、同じ商品を複数モールに出す場合は同じ値を入れて横断できるようにする
+  // 商品コードはモール・店舗ごとにprefixが変わるため（例: 楽天=prefixなし / au PAY=dk_ / Amazon=gam_）、
+  // 全体ではなく「店舗＋コード」で一意とする。2026-09-16決定（docs/design-gap.md §6-#11）。
+  code         String
+  shopId       String
+  shop         Shop     @relation(fields: [shopId], references: [id], onDelete: Restrict)
+  name         String
+  spec         String?
+  note         String?
+  category     String
+  priceTaxRate Int      @default(10)
+  setCount     Int      @default(5)
+  // 稟議ステータス。draft(下書き) → pending(稟議中) → approved(承認済み) → selling(販売中) → ended(販売終了)
+  //                                    └→ rejected(却下) → draft
+  // 稟議そのものはジョブカンで回すため、却下理由はここには持たない（2026-09-16決定 #10）
+  status       String   @default("draft")
+  // 認証が入るまでは常にnull。ミドルウェア(middleware/auth.ts)がユーザーを載せたら自動で埋まる
+  createdBy    String?
+  updatedBy    String?
+  normalData   String // GroupData の JSON文字列
+  saleData     String
+  couponData   String
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  orders       Order[]
+
+  @@unique([shopId, code])
+  @@index([category])
+  @@index([shopId])
+}
+
+// サイトマスタ（④マスタ①）
+model SiteFee {
+  id         String   @id @default(cuid())
+  name       String   @unique
+  fee        Float?
+  couponFee  Float?
+  consultFee Float?
+  otherFees  String   @default("[]") // SiteFeeOther[] の JSON文字列
+  note       String?
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+}
+
+// 送料マスタ（④マスタ②）
+model ShippingRate {
+  id        String   @id @default(cuid())
+  carrier   String?
+  temp      String?
+  size      String?
+  unitPrice Float
+  taxRate   Float    @default(10)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+// 資材マスタ（④マスタ③）
+model Material {
+  id        String   @id @default(cuid())
+  name      String   @unique
+  unitPrice Float
+  taxRate   Float    @default(10)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+// モールマスタ（楽天市場 / Yahoo!ショッピング / au PAY マーケット / Amazon / 自社EC）
+// 集計軸として使うほか、店舗マスタの親になる。初期データは prisma/seed.ts で投入する。
+model Mall {
+  id         String   @id @default(cuid())
+  name       String   @unique
+  sortOrder  Int      @default(0)
+  shops      Shop[]
+  csvMapping MallCsvMapping?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+// 店舗マスタ。1つのモールに複数店舗がぶら下がる
+// （例: 楽天市場に「くまもと風土」「ご当地風土」「九州風土」「フレッシュまんま」）。
+// モールを消すと店舗が迷子になるため、店舗が残っているモールは削除できないようにしている（Restrict）。
+model Shop {
+  id        String   @id @default(cuid())
+  mallId    String
+  mall      Mall     @relation(fields: [mallId], references: [id], onDelete: Restrict)
+  name      String
+  sortOrder Int      @default(0)
+  products  Product[]
+  batches   ImportBatch[]
+  orders    Order[]
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([mallId, name])
+  @@index([mallId])
+}
+
+// 受注CSVの取込履歴（設計書§4 import_batches）。1回のアップロードが1レコード。
+model ImportBatch {
+  id             String   @id @default(cuid())
+  shopId         String
+  shop           Shop     @relation(fields: [shopId], references: [id], onDelete: Restrict)
+  fileName       String
+  importedAt     DateTime @default(now())
+  totalCount     Int // ファイルのデータ行数
+  successCount   Int // 商品に紐づいて集計できた件数
+  unmatchedCount Int // 商品コードが未登録だった件数
+  errorCount     Int // 売価がどの区分とも一致しなかった件数
+  excludedCount  Int // 注文ステータスで除外した件数（キャンセルなど）
+  status         String   @default("done") // done / failed
+  importedBy     String? // 認証が入ったら登録者を記録する（現状は常にnull）
+  // 未紐付けだった商品コード → 件数 のJSON。あとから「何が紐づかなかったか」を追えるようにする
+  unmatchedDetail String  @default("{}")
+  // 売価が一致しなかった「商品コード @単価」→ 件数 のJSON
+  errorDetail     String  @default("{}")
+  orders         Order[]
+
+  @@index([shopId])
+  @@index([importedAt])
+}
+
+// 受注明細（設計書§4 orders）。取込時に1行＝1レコードで保存する。
+model Order {
+  id          String      @id @default(cuid())
+  batchId     String
+  batch       ImportBatch @relation(fields: [batchId], references: [id], onDelete: Cascade)
+  shopId      String
+  shop        Shop        @relation(fields: [shopId], references: [id], onDelete: Restrict)
+  orderNo     String?
+  // 日付は "YYYY-MM-DD" の文字列で持つ。
+  // 設計書は date型を指定しているが、SQLite/PrismaのDateTimeはタイムゾーンの解釈が入り、
+  // 「2026-09-14T23:57+09:00」のような受注が前日にずれる事故が起きうる。
+  // 文字列なら辞書順＝日付順で並び替え・範囲検索ができ、時刻が混ざる余地もない。
+  // 設計書§7-#1「日付だけを持つ」という要件は満たしている。
+  orderDate   String
+  productCode String
+  productId   String? // 紐づいた商品。未紐付けならnull
+  product     Product? @relation(fields: [productId], references: [id], onDelete: SetNull)
+  unitPrice   Float
+  quantity    Int
+  amount      Float
+  kind        String // normal / sale / coupon
+  profit      Float
+  profitRate  Float
+
+  @@index([shopId, orderDate])
+  @@index([productId])
+  @@index([batchId])
+}
+
+// モール別のCSV列マッピング設定（設計書§4 mall_csv_mappings）。
+// 列構成はモールごとに決まっているので、店舗ではなくモール単位で保存する。
+model MallCsvMapping {
+  id        String   @id @default(cuid())
+  mallId    String   @unique
+  mall      Mall     @relation(fields: [mallId], references: [id], onDelete: Cascade)
+  config    String // OrderColumnMapping の JSON文字列
+  updatedAt DateTime @updatedAt
+}

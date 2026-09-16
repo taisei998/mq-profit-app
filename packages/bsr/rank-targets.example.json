@@ -1,0 +1,19 @@
+{
+  "_説明": "このファイルを rank-targets.json という名前でコピーしてください。_ で始まる項目は無視されます。",
+  "_重要": "追跡するキーワードはここには書きません。「SEO順位」タブのA列（キーワード）とE列（ASIN）が追跡リストです。",
+
+  "_spreadsheetId": "書き込み先のスプレッドシートID。省略すると .env の SPREADSHEET_ID を使います。",
+  "spreadsheetId": "",
+
+  "_sheet": "追跡リスト兼・現在順位の表になるタブ名。",
+  "sheet": "SEO順位",
+
+  "_updatedCell": "省略可。実行日時をこのセルに書きます。今朝ちゃんと動いたかがシート上で分かります。",
+  "updatedCell": "SEO順位!B1",
+
+  "_history": "省略可。日付で1行ずつ増える履歴タブ。列はキーワードごとにバッチが自動で増やします。省略すると履歴を残しません。",
+  "history": { "sheet": "SEO順位履歴" },
+
+  "_layout": "省略可。既定と違う列を使いたいときだけ書きます。diff と link は null にすると数式を入れません。",
+  "_layout例": { "headerRow": 3, "startRow": 4, "keyword": "A", "rank": "B", "diff": "C", "asin": "E", "link": "G" }
+}

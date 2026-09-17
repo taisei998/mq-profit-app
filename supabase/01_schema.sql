@@ -241,7 +241,12 @@ create trigger products_touch_updated_by
 -- 6. 稟議ステータスの遷移を強制する
 -- ------------------------------------------------------------
 -- 画面側でも進める先しか出していないが、APIを直接叩かれても守れるようDB側でも検証する。
--- 承認・却下は role が approver / admin の人だけ。
+--
+-- 【誰が変更できるか】
+-- 2026-09-17決定: ステータスの変更は「ログインしている人なら誰でも」可能。
+-- 稟議そのものはジョブカンで回しており、このアプリは「今どの段階か」を記録するだけなので、
+-- ここで承認者を絞る意味が薄いという判断（設計書§2.2-#1の当初案からの変更）。
+-- ※ 遷移の順序（販売終了から稟議中には戻せない等）はそのまま維持する。
 create or replace function public.enforce_status_transition()
 returns trigger
 language plpgsql
@@ -250,7 +255,6 @@ set search_path = public
 as $$
 declare
   allowed text[];
-  my_role text;
 begin
   if new.status = old.status then
     return new;
@@ -269,14 +273,6 @@ begin
   if not (new.status = any(allowed)) then
     raise exception '「%」から「%」には変更できません。', old.status, new.status
       using errcode = 'check_violation';
-  end if;
-
-  if new.status in ('approved','rejected') then
-    select role into my_role from public.profiles where id = auth.uid();
-    if my_role is null or my_role not in ('approver','admin') then
-      raise exception '承認・却下の権限がありません。管理者に承認権限（approver）の付与を依頼してください。'
-        using errcode = 'insufficient_privilege';
-    end if;
   end if;
 
   return new;

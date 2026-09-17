@@ -115,7 +115,8 @@ export interface SiteFeeOther {
   pct: number | null;
 }
 
-// モールマスタ（楽天市場 / Yahoo!ショッピング / au PAY マーケット / Amazon / 自社EC）
+// モールマスタ（楽天市場 / Amazon / TikTok / メルカリ / 自社EC など18件）。
+// 一覧はDBの malls テーブルが持つ。マスタ管理の画面から増減できるので、ここに固定の一覧は書かない。
 export interface MallRecord {
   id: string;
   name: string;

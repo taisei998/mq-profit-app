@@ -425,7 +425,7 @@ function MatMaster() {
   );
 }
 
-// ④モールマスタ。楽天市場・Yahoo!ショッピング・au PAY マーケット・Amazon・自社EC など。
+// ④モールマスタ。楽天市場・Amazon・TikTok・メルカリ・自社EC など。初期データは18件。
 // 店舗マスタの親であり、商品や受注の集計軸にもなる。
 function MallMaster() {
   const { data: malls = [] } = useMalls();

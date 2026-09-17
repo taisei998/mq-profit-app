@@ -364,5 +364,18 @@ insert into public.malls (name, "sortOrder") values
   ('Yahoo!ショッピング', 2),
   ('au PAY マーケット', 3),
   ('Amazon', 4),
-  ('自社EC', 5)
+  ('自社EC', 5),
+  ('TikTok', 6),
+  ('カウシェ', 7),
+  ('Qoo10', 8),
+  ('Dショッピング', 9),
+  ('サンプル', 10),
+  ('YAMADA', 11),
+  ('セゾン', 12),
+  ('メルカリ', 13),
+  ('ANA', 14),
+  ('JAL', 15),
+  ('TEMU', 16),
+  ('LINEgift', 17),
+  ('ぐるなび', 18)
 on conflict (name) do nothing;

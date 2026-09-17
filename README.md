@@ -102,6 +102,30 @@ BSRバッチとはGoogleの設定（サービスアカウント）を共有し�
 どちらも読めます。文字コード（UTF-8 / Shift_JIS）も自動判定します。
 モールごとに列設定を保存でき、次回からは自動で適用されます。
 
+## 他の人が改修するとき
+
+1. リポジトリをクローンする（公開リポジトリなので誰でも取得できる）
+2. **リポジトリへのpush権限**が必要 … オーナーに Settings → Collaborators から招待してもらう
+3. **Supabaseの接続先**が必要 … `packages/client/.env.example` を `.env.local` にコピーし、
+   SupabaseダッシュボードのSettings → APIから `Project URL` と `anon public` キーを記入する
+   （anonキーは公開前提の鍵なので秘密ではありません。公開版のJSにも埋め込まれています）
+4. **Supabaseのダッシュボードを触る必要がある場合**は、オーナーからプロジェクトに招待してもらう
+
+```bash
+npm install
+cp packages/client/.env.example packages/client/.env.local   # 接続先を記入
+npm run build --workspace=packages/shared
+npm run dev --workspace=packages/client                       # http://localhost:5173
+```
+
+**手元の開発も公開版と同じデータベースに繋がります。** 試したデータは本番に入るので注意してください。
+
+`main` に push すると自動で公開版が更新されます。
+
+> Claude Code で改修する場合は、リポジトリ直下の [CLAUDE.md](CLAUDE.md) が自動で読み込まれます。
+> 守るべきルール（計算ロジックを変えない・新テーブルには必ずRLSを付ける等）と、
+> 過去に踏んだ落とし穴をまとめてあるので、人が読む場合も目を通してください。
+
 ## 今後やるべきこと
 
 - 認証（ログイン）は未実装です。社内OAuth2認証サーバーとの連携は方針待ちですが、

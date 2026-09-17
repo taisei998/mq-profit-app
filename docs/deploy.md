@@ -44,14 +44,36 @@
 - 稟議ステータスの遷移制限（承認・却下は承認権限を持つ人だけ）
 - モールの初期データ（楽天市場 / Yahoo!ショッピング / au PAY マーケット / Amazon / 自社EC）
 
-## 3. 使う人のアカウントを作る（人の作業）
+## 3. 使う人が自分で登録できるようにする
 
-1. Supabaseの **Authentication → Users → Add user**
-2. メールアドレスとパスワードを入れて作成（**Auto Confirm User** をオンに）
-3. 使う人に、そのメールアドレスとパスワードを伝える
+社内の人が自分で登録できるようにしつつ、社外の人は入れないようにしています。
 
-> 誰でも勝手に登録できると困るので、**Authentication → Providers → Email** の
-> **Enable sign ups** は**オフ**にしてください。管理者が作ったアカウントだけが使えます。
+**仕組み**: 登録できるのは会社のメールアドレス（`lo-cal-g.com` / `lo-cal.co.jp`）だけです。
+それ以外は `supabase/03_signup_domain.sql` のトリガーがDB側で弾きます。
+さらに確認メールのリンクを開かないとログインできないので、
+**そのメールボックスを実際に持っている人だけ**が入れます。
+
+必要な設定:
+
+1. **SQL Editor** で `supabase/03_signup_domain.sql` を実行
+2. **Authentication → Sign In / Providers → User Signups**
+   - **Allow new users to sign up** を**オン**にする
+3. **Authentication → Sign In / Providers → Email**
+   - **Confirm email** を**オン**にする（これがオフだと、実在しないアドレスでも登録できてしまいます）
+
+> **Confirm email は必ずオンにしてください。** オフにすると、会社ドメインさえ知っていれば
+> 存在しないアドレス（例: `dummy@lo-cal-g.com`）でも登録できてしまいます。
+
+### 管理者が直接アカウントを作る場合
+
+**Authentication → Users → Add user** からも作れます（**Auto Confirm User** をオンに）。
+ただしドメイン制限のトリガーはこちらにも効くので、会社ドメイン以外は作れません。
+
+### 確認メールが届かないとき
+
+無料プランに付属するメール送信は**1時間あたり数通まで**の制限があり、テスト用の位置づけです。
+人数が増えて届かなくなったら、**Project Settings → Authentication → SMTP Settings** で
+会社のメールサーバー（Microsoft 365など）を設定してください。
 
 ### 承認できる人を指定する
 
@@ -108,7 +130,8 @@ DB側のアクセス制御（RLS）が「ログインした人だけ」に絞っ
 
 - `service_role` キーをリポジトリや画面のコードに入れる（RLSを無視できてしまいます）
 - RLSを無効にする、または `using (true)` を `to authenticated` 無しで書く
-- Supabaseの **Enable sign ups** をオンのままにする（誰でもアカウントを作れてしまいます）
+- **Confirm email** をオフにする（実在しないアドレスでも登録できてしまいます）
+- `supabase/03_signup_domain.sql` のドメイン制限を外す（誰でもアカウントを作れてしまいます）
 
 新しいテーブルを足すときは、**必ずRLSを有効にしてポリシーを付けてください。**
 付け忘れたテーブルは、ログインさえすれば誰でも読める状態になります。

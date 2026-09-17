@@ -1,60 +1,44 @@
 # MQ率 利益計算アプリ
 
-EC商品の粗利率・MQ率を計算する社内ツールです。旧バージョンは1枚のHTMLファイルにすべてが
-入った「静的アプリ」でしたが、サーバー＋データベースを持つ構成に作り直しました
+EC商品の粗利率・MQ率を計算する社内ツールです。
+旧バージョンは1枚のHTMLファイルにすべてが入った「静的アプリ」でしたが、
+**データベースと認証を持つWebアプリ**に作り直しました
 （元のHTMLは [`legacy/`](legacy/) に保存してあります。参考用で、もう更新はしません）。
+
+## 使う
+
+**https://taisei998.github.io/mq-profit-app/**
+
+リンクを開くとログイン画面が出ます。会社のメールアドレスで登録・ログインしてください。
+在宅でも出先でも、ブラウザさえあれば使えます。
 
 ## これは何が変わったのか
 
-- データの保存先が「このブラウザだけ」から「サーバー上のデータベース」に変わりました。
+- データの保存先が「このブラウザだけ」から**クラウド上のデータベース**に変わりました。
   別のPCからでも同じデータを見られますし、ブラウザのキャッシュを消しても消えません。
-- 見た目・操作方法・計算のしかたは、できるだけ元のアプリと同じになるようにしています。
-
-## 動作確認のしかた（社内の誰かが手元で試す場合）
-
-前提: このリポジトリを開いているPCに Node.js が入っていること（`node --version` で確認）。
-入っていなければ [nodejs.org](https://nodejs.org/) からLTS版をインストールしてください。
-**Dockerは不要です。**
-
-```bash
-# 1. 初回だけ：依存ライブラリのインストール
-npm install
-
-# 2. 初回だけ：ローカルDB（SQLiteファイル1つ）を作成
-npm run db:migrate --workspace=packages/server
-
-# 3. 初回だけ：モールマスタの初期データ（楽天市場・Yahoo!・au PAY・Amazon・自社EC）を投入
-npm run db:seed
-
-# 4. サーバーと画面を両方起動（このターミナルは開いたままにする）
-npm run dev
-```
-
-起動したら http://localhost:5173 をブラウザで開いてください。止めるときはターミナルで `Ctrl+C`。
-
-データは `packages/server/prisma/dev.db` というファイル1つに保存されます（`.gitignore`
-でリポジトリには含めていません）。中身を画面で見たいときは以下でDB専用の管理画面が開きます。
-
-```bash
-npm run db:studio
-```
+- **受注データが蓄積される**ようになり、HOMEで売上・粗利の推移を見られます。
+- 計算のしかたは元のアプリと同じです（設計書の必須テストケースで固定しています）。
 
 ## 構成
 
-npmワークスペースによるモノレポです。
+```
+画面（GitHub Pagesが配信）  →  Supabase（PostgreSQL ＋ ログイン）
+```
+
+自前のサーバーは持ちません。費用は無料枠の範囲内です。
 
 ```
 packages/
-  shared/   … 計算ロジック・型定義（フロント・サーバー共通、テストもここ）
-  server/   … API サーバー（Node.js + Express + Prisma）
-  client/   … 画面（React + TypeScript + Vite）
-  bsr/      … Amazon BSR・検索順位の自動記録バッチ（画面なし。Googleスプレッドシートに書き込む）
+  shared/   … 計算ロジック・型定義（テストもここ）
+  client/   … 画面（React + TypeScript + Vite）★これが本体
+  server/   … 旧構成（Express + Prisma + SQLite）。公開版では未使用・参考用に残置
+  bsr/      … Amazon BSR・検索順位の自動記録バッチ（このアプリとは無関係に動く）
+supabase/   … DBスキーマ・アクセス制御・DB側の関数（SQL Editorに貼って実行する）
 legacy/     … 旧・静的HTML版（参考用、更新なし）
-docs/       … 設計メモ・今後の課題
+docs/       … 設計メモ
 ```
 
-技術選定の理由や、PostgreSQL/MariaDBへの切り替え手順は [docs/architecture.md](docs/architecture.md)
-を参照してください。
+公開の手順とセキュリティ上の注意は [docs/deploy.md](docs/deploy.md) を参照してください。
 
 ## 同梱のバッチ: Amazon BSR自動記録
 
@@ -128,9 +112,10 @@ npm run dev --workspace=packages/client                       # http://localhost
 
 ## 今後やるべきこと
 
-- 認証（ログイン）は未実装です。社内OAuth2認証サーバーとの連携は方針待ちですが、
-  差し込み口（`packages/server/src/middleware/auth.ts`）と、登録者・更新者を記録する列は
-  用意してあります。連携できれば値が入り始めます。
+- **商品マスタの登録**を進めること。未登録の商品の受注は集計に入らないので、
+  登録が進むほどダッシュボードの数字が実態に近づきます（HOMEのアラートに未紐付け件数が出ます）。
+- **確認メールの送信上限**。Supabase無料枠のメール送信は1時間に数通までです。
+  人数が増えて届かなくなったら、会社のメールサーバーをSMTPに設定してください（手順は deploy.md）。
 - 設計書（`MQ率計算アプリ_設計書.md`）との対応、決定事項、実装済みの内容は
   [docs/design-gap.md](docs/design-gap.md) にまとめています。**新機能の検討はここから読んでください。**
 - 移植時点で挙げた運用上の論点は [docs/requirements-todo.md](docs/requirements-todo.md) に残しています。

@@ -339,7 +339,29 @@ create policy "profiles_update_self" on public.profiles
   with check (id = auth.uid() and role = (select role from public.profiles where id = auth.uid()));
 
 -- ------------------------------------------------------------
--- 8. モールの初期データ
+-- 8. Data API に見せる権限を明示的に与える
+--
+-- プロジェクト作成時の「Automatically expose new tables」をオフにしているため、
+-- 新しく作ったテーブルは既定ではAPIから触れない。ここで明示的に許可する。
+-- 「うっかり作ったテーブルが誰でも読める」事故を防ぐための設定なので、
+-- テーブルを追加したらこのブロックも実行し直してください。
+--
+-- 未ログイン(anon)には何も与えない。ログイン済み(authenticated)にだけ与え、
+-- さらにその上でRLSが行単位の可否を決める、という二段構えにしている。
+-- ------------------------------------------------------------
+grant usage on schema public to anon, authenticated;
+
+grant select, insert, update, delete on all tables in schema public to authenticated;
+grant usage, select on all sequences in schema public to authenticated;
+
+-- 今後このスクリプト以外でテーブルを足したときのために既定値も設定しておく
+alter default privileges in schema public
+  grant select, insert, update, delete on tables to authenticated;
+alter default privileges in schema public
+  grant usage, select on sequences to authenticated;
+
+-- ------------------------------------------------------------
+-- 9. モールの初期データ
 -- ------------------------------------------------------------
 insert into public.malls (name, "sortOrder") values
   ('楽天市場', 1),

@@ -234,3 +234,13 @@ begin
   );
 end;
 $$;
+
+-- ------------------------------------------------------------
+-- 実行権限
+-- ------------------------------------------------------------
+-- ログイン済みの人だけが呼べるようにする。未ログイン(anon)には与えない。
+revoke all on function public.import_orders(uuid, text, int, int, int, int, int, jsonb, jsonb, jsonb) from public;
+revoke all on function public.dashboard_summary(text, text, uuid, uuid, text) from public;
+
+grant execute on function public.import_orders(uuid, text, int, int, int, int, int, jsonb, jsonb, jsonb) to authenticated;
+grant execute on function public.dashboard_summary(text, text, uuid, uuid, text) to authenticated;

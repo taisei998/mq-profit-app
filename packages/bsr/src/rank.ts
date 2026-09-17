@@ -82,11 +82,16 @@ function pace(ms: number): number {
 // 少し時間をおくと通ることがほとんどです。そこで1周したあと、落ちたキーワードだけ
 // まとめて時間をおいてから1回だけやり直します。
 // （1周目で7件落ちても、2周目でほぼ拾えるようにするのが狙い）
-async function measureAll(targets: DashboardRow[], config: RankConfig): Promise<Outcome[]> {
-  const report = (o: Outcome) => {
+async function measureAll(
+  targets: DashboardRow[],
+  config: RankConfig,
+  onResult?: (o: Outcome) => Promise<void>
+): Promise<Outcome[]> {
+  const report = async (o: Outcome) => {
     const line = describe(o, config);
     if (o.error) console.error(`[rank] ${line}`);
     else console.log(`[rank] ${line}`);
+    if (onResult) await onResult(o);
   };
 
   const outcomes: Outcome[] = [];
@@ -94,7 +99,7 @@ async function measureAll(targets: DashboardRow[], config: RankConfig): Promise<
     if (i > 0) await sleep(pace(config.intervalMs));
     const outcome = await measure(target, config);
     outcomes.push(outcome);
-    report(outcome);
+    await report(outcome);
   }
 
   const retryIndexes = outcomes.map((o, i) => (o.error ? i : -1)).filter((i) => i >= 0);
@@ -116,10 +121,62 @@ async function measureAll(targets: DashboardRow[], config: RankConfig): Promise<
     }
     outcomes[i] = retried;
     recovered++;
-    report(retried);
+    await report(retried);
   }
   console.log(`[rank] 再試行で${recovered}件を回収しました（残り${retryIndexes.length - recovered}件）。`);
   return outcomes;
+}
+
+// 1件測るごとにシートへ書き込むための関数を用意する。
+//
+// 以前は全件まとめて最後に書いていたため、途中で強制終了されると
+// そこまでに測れたぶんも含めて丸ごと失われていました（コンソールを閉じられる事故が実際に発生）。
+// 日付行と見出しだけ先に確保しておき、あとは測れた順に1セルずつ埋めていきます。
+async function makeIncrementalWriter(
+  config: RankConfig,
+  targets: DashboardRow[],
+  today: string
+): Promise<(o: Outcome) => Promise<void>> {
+  const d = config.dashboard;
+  const dashTarget: SheetRange = { spreadsheetId: config.spreadsheetId, sheetName: d.sheetName };
+
+  let plan: { target: SheetRange; row: number; columnOf: Map<number, number> } | null = null;
+  if (config.history) {
+    const h = config.history;
+    const target: SheetRange = { spreadsheetId: config.spreadsheetId, sheetName: h.sheetName };
+    const headerValues = (await readRange(target, `${h.headerRow}:${h.headerRow}`))[0] ?? [];
+    const assignments = assignHistoryColumns(headerValues, targets, h.dateColumn);
+    const dateCol = columnLetter(h.dateColumn);
+    const dateValues = await readRange(target, `${dateCol}${h.startRow}:${dateCol}`);
+    const { row, isNew } = findDateRow(dateValues, { dataStartRow: h.startRow }, today);
+
+    // 日付と新しい見出しは先に書いておく。あとから行がずれないようにするため。
+    const seed: Update[] = [];
+    if (isNew) seed.push({ a1: cellA1(h.dateColumn, row), values: [[today]] });
+    for (const a of assignments) {
+      if (a.isNew) seed.push({ a1: cellA1(a.column, h.headerRow), values: [[a.label]] });
+    }
+    if (seed.length > 0) await writeRanges(target, seed);
+
+    const columnOf = new Map<number, number>();
+    targets.forEach((t, i) => columnOf.set(t.row, assignments[i].column));
+    plan = { target, row, columnOf };
+  }
+
+  return async (o: Outcome) => {
+    if (o.error) return; // 失敗したセルは触らない（前回の値を消さないため）
+    const value = o.hit ? o.hit.value : config.notFoundText;
+    try {
+      await writeRanges(dashTarget, [{ a1: cellA1(d.rankColumn, o.target.row), values: [[value]] }]);
+      const col = plan?.columnOf.get(o.target.row);
+      if (plan && col != null) {
+        await writeRanges(plan.target, [{ a1: cellA1(col, plan.row), values: [[value]] }]);
+      }
+    } catch (err) {
+      // ここで落としても意味がないので、最後のまとめ書きに任せる
+      console.warn(`[rank] 途中書き込みに失敗しました（最後にまとめて書き直します）: ${err instanceof Error ? err.message : err}`);
+    }
+  };
 }
 
 function describe(outcome: Outcome, config: RankConfig): string {
@@ -189,7 +246,9 @@ async function main(): Promise<number> {
   }
 
   // --- 2. 順位を測る ---
-  const outcomes = await measureAll(targets, config);
+  // --check のときは書き込まない。それ以外は1件ずつ即座にシートへ反映する。
+  const flush = CHECK_ONLY ? undefined : await makeIncrementalWriter(config, targets, today);
+  const outcomes = await measureAll(targets, config, flush);
   const failed = outcomes.filter((o) => o.error);
 
   if (CHECK_ONLY) {

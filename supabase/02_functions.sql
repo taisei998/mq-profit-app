@@ -83,6 +83,38 @@ $$;
 -- ------------------------------------------------------------
 -- HOMEダッシュボードの集計
 -- ------------------------------------------------------------
+-- 集計対象の受注を1か所で定義しておく。
+-- 以前は一時テーブルに貯めていたが、
+--   * Supabaseには「WHERE句の無いDELETEを禁止する」安全装置があり初期化に失敗する
+--   * 接続プール環境では一時テーブルの状態が読みにくい
+-- ため、関数に切り出して都度引き直す形にした。(shopId, orderDate) に索引があるので十分速い。
+create or replace function public.dashboard_scope(
+  p_from     text,
+  p_to       text,
+  p_shop_ids uuid[],
+  p_status   text
+)
+returns table (
+  "orderDate"  text,
+  "shopId"     uuid,
+  "productId"  uuid,
+  amount       double precision,
+  profit       double precision
+)
+language sql
+stable
+security invoker
+set search_path = public
+as $$
+  select o."orderDate", o."shopId", o."productId", o.amount, o.profit
+  from public.orders o
+  left join public.products pr on pr.id = o."productId"
+  where o."orderDate" >= p_from
+    and o."orderDate" <= p_to
+    and (p_shop_ids is null or o."shopId" = any(p_shop_ids))
+    and (p_status is null or pr.status = p_status)
+$$;
+
 -- 期間・モール・店舗・ステータスで絞り込んだうえで、
 -- KPI / 月別 / 日別 / モール別 / 商品ランキング / アラート をまとめて返す。
 create or replace function public.dashboard_summary(
@@ -127,42 +159,26 @@ begin
   v_prev_to   := (p_from::date - 1)::text;
   v_prev_from := ((p_from::date - 1) - (v_days - 1))::text;
 
-  -- 絞り込み済みの受注を一時的にまとめる
-  create temporary table if not exists _dash_scope (
-    "orderDate" text, "shopId" uuid, "productId" uuid,
-    amount double precision, profit double precision
-  ) on commit drop;
-  delete from _dash_scope;
-
-  insert into _dash_scope
-  select o."orderDate", o."shopId", o."productId", o.amount, o.profit
-  from public.orders o
-  left join public.products pr on pr.id = o."productId"
-  where o."orderDate" >= v_prev_from
-    and o."orderDate" <= p_to
-    and (v_shop_ids is null or o."shopId" = any(v_shop_ids))
-    and (p_status is null or pr.status = p_status);
-
   select coalesce(sum(amount),0) as sales, coalesce(sum(profit),0) as profit, count(*) as cnt
     into v_cur
-    from _dash_scope where "orderDate" >= p_from and "orderDate" <= p_to;
+    from public.dashboard_scope(p_from, p_to, v_shop_ids, p_status);
 
   select coalesce(sum(amount),0) as sales, coalesce(sum(profit),0) as profit, count(*) as cnt
     into v_prev
-    from _dash_scope where "orderDate" >= v_prev_from and "orderDate" <= v_prev_to;
+    from public.dashboard_scope(v_prev_from, v_prev_to, v_shop_ids, p_status);
 
   -- 月別（売上推移グラフ用）
   select coalesce(jsonb_agg(x order by x.month), '[]'::jsonb) into v_monthly from (
     select substring("orderDate" from 1 for 7) as month,
            sum(amount) as sales, sum(profit) as profit, count(*) as count
-    from _dash_scope where "orderDate" >= p_from and "orderDate" <= p_to
+    from public.dashboard_scope(p_from, p_to, v_shop_ids, p_status)
     group by 1
   ) x;
 
   -- 日別
   select coalesce(jsonb_agg(x order by x.date), '[]'::jsonb) into v_daily from (
     select "orderDate" as date, sum(amount) as sales, sum(profit) as profit, count(*) as count
-    from _dash_scope where "orderDate" >= p_from and "orderDate" <= p_to
+    from public.dashboard_scope(p_from, p_to, v_shop_ids, p_status)
     group by 1
   ) x;
 
@@ -170,10 +186,9 @@ begin
   select coalesce(jsonb_agg(x order by x.sales desc), '[]'::jsonb) into v_by_mall from (
     select m.id as "mallId", m.name as "mallName",
            sum(d.amount) as sales, sum(d.profit) as profit, count(*) as count
-    from _dash_scope d
+    from public.dashboard_scope(p_from, p_to, v_shop_ids, p_status) d
     join public.shops s on s.id = d."shopId"
     join public.malls m on m.id = s."mallId"
-    where d."orderDate" >= p_from and d."orderDate" <= p_to
     group by m.id, m.name
   ) x;
 
@@ -184,10 +199,9 @@ begin
            coalesce(pr.name, '(削除された商品)') as name,
            coalesce(pr.code, '') as code,
            sum(d.amount) as sales, sum(d.profit) as profit, count(*) as count
-    from _dash_scope d
+    from public.dashboard_scope(p_from, p_to, v_shop_ids, p_status) d
     left join public.products pr on pr.id = d."productId"
-    where d."orderDate" >= p_from and d."orderDate" <= p_to
-      and d."productId" is not null
+    where d."productId" is not null
     group by d."productId", pr.name, pr.code
     order by sum(d.amount) desc
     limit 5
@@ -241,6 +255,8 @@ $$;
 -- ログイン済みの人だけが呼べるようにする。未ログイン(anon)には与えない。
 revoke all on function public.import_orders(uuid, text, int, int, int, int, int, jsonb, jsonb, jsonb) from public;
 revoke all on function public.dashboard_summary(text, text, uuid, uuid, text) from public;
+revoke all on function public.dashboard_scope(text, text, uuid[], text) from public;
 
 grant execute on function public.import_orders(uuid, text, int, int, int, int, int, jsonb, jsonb, jsonb) to authenticated;
 grant execute on function public.dashboard_summary(text, text, uuid, uuid, text) to authenticated;
+grant execute on function public.dashboard_scope(text, text, uuid[], text) to authenticated;

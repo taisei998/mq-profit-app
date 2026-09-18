@@ -1,4 +1,4 @@
-import { GROUPS, GROUP_COLOR, GROUP_LABEL, PRODUCT_STATUSES, ProductRecord, ProductStatus, STATUS_LABEL } from '@ec-ai/shared';
+import { GROUPS, GROUP_COLOR, GROUP_LABEL, JOBCAN_STATUS_LABEL, PRODUCT_STATUSES, ProductRecord, ProductStatus, STATUS_LABEL } from '@ec-ai/shared';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { yen } from '../lib/format.js';
 import { readFileAsText } from '../lib/file.js';
@@ -408,6 +408,20 @@ function ProductRow({
               </tbody>
             </table>
             {p.note && <div className="detail-note">備考：{p.note}</div>}
+            {p.jobcanStatus && (
+              // ジョブカンから取り込んだ稟議の情報。連携していない商品には出ない。
+              // アプリのステータスに写していない状態（差戻しなど）もここで分かるようにしている。
+              <div className="detail-note">
+                ジョブカン：{JOBCAN_STATUS_LABEL[p.jobcanStatus]}
+                {p.jobcanRequestId != null && `（申請書ID ${p.jobcanRequestId}）`}
+                {p.jobcanTitle && ` ／ ${p.jobcanTitle}`}
+                {p.jobcanStatus === 'returned' && (
+                  <span className="hint">
+                    　差戻しです。内容を直して申請し直す場合は、このアプリのステータスも手で戻してください。
+                  </span>
+                )}
+              </div>
+            )}
           </td>
         </tr>
       )}

@@ -9,6 +9,7 @@ EC（楽天・Yahoo!・au PAY・Amazon・自社EC）で売る商品の**粗利�
 |---|---|
 | `docs/design-gap.md` | **何をなぜそう決めたかの記録。改修前に必ず読む。** 決定事項に番号が振ってある（#1〜#17） |
 | `docs/deploy.md` | 公開の手順とセキュリティ上の禁止事項 |
+| `docs/jobcan.md` | ジョブカンワークフロー連携（稟議ステータスの自動取り込み）の設定と仕様 |
 | `MQ率計算アプリ_設計書.md`（リポジトリ外） | 発注元の設計書。計算ロジックの原典 |
 
 ## 絶対に守ること
@@ -23,6 +24,9 @@ EC（楽天・Yahoo!・au PAY・Amazon・自社EC）で売る商品の**粗利�
    `supabase/01_schema.sql` の「7. アクセス制御（RLS）」と「8. GRANT」の両方に追記すること。
 
 3. **`service_role` キーをコードにもリポジトリにも入れない。** RLSを無視できてしまう。
+   Edge Function の中で `Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')` を読むのは可（Supabaseが
+   実行時に渡すもので、リポジトリには入らない）。外部サービスのAPIキーも同じ扱いで、
+   **必ずEdge Functionのシークレットに置く**。画面側（`VITE_*`）に置くと公開JSに埋まる。
 
 4. **一括削除機能を作らない。** 事故防止のため旧アプリでも撤去済み（設計書§5.3・§9）。
    取込単位の取消（`import_batches` の削除）だけ許可している。
@@ -44,6 +48,7 @@ packages/
   server/   旧構成（Express + Prisma + SQLite）。★公開版では未使用。参考用に残置
   bsr/      Amazon BSR・検索順位の記録バッチ。このアプリとは無関係に動く
 supabase/   DBスキーマ・RLS・DB側の関数（SQL Editorに貼って実行する）
+  functions/  Edge Function（外部APIを叩く処理。キーを画面に出さないためここに置く）
 docs/       設計メモ
 legacy/     旧・単一HTML版（参考用）
 ```
@@ -97,6 +102,8 @@ npm run test --workspace=packages/shared   # 計算ロジック（46件）
 - **`.map(parseCSVLine)` と書かない。** 第2引数に配列の添字が渡って区切り文字が壊れる。
 - **`packages/shared` は先にビルドする。** client/server の型チェックが `dist` を見るため。
 - **Supabaseの埋め込みリレーションは配列型として推論される。** `as unknown as` でキャストが要る。
+- **ジョブカンAPIの `Authorization: Token xxx` の「Token」はそのまま書く文字列。**
+  置き換える箇所だと思って消すと401になる。
 - **受注CSVはモールごとに全く違う。** Amazonはタブ区切りの `.txt`、単価の列が無い、
   キャンセル行が混ざる。楽天は注文日と時間が別列。詳細は design-gap.md §6。
 
@@ -116,4 +123,4 @@ npm run test --workspace=packages/shared   # 計算ロジック（46件）
 | 区分 | 通常時 / SALE時 / SALE+クーポン時 の3つ |
 | セット | 1〜5セット。同じ商品を複数買ったときの価格帯 |
 | モール / 店舗 | 楽天市場（モール）に「くまもと風土」など複数の店舗が入る2階層 |
-| 稟議 | 商品登録の承認フロー。実体はジョブカンで回し、このアプリは状態を記録するだけ |
+| 稟議 | 商品登録の承認フロー。実体はジョブカンワークフローで回し、このアプリは状態を写し取るだけ。<br>ジョブカンのAPIは参照専用なので、**アプリから申請は出せない**（`docs/jobcan.md`） |

@@ -3,6 +3,7 @@ import {
   FieldLines,
   GroupData,
   ImportBatchRecord,
+  JobcanStatus,
   MallRecord,
   MaterialRecord,
   OrderAggregationResult,
@@ -64,6 +65,13 @@ interface ProductRow {
   couponData: GroupData;
   createdAt: string;
   updatedAt: string;
+  // ジョブカン連携で埋まる列。連携前・未突合の商品ではnull
+  jobcanRequestId: number | null;
+  jobcanStatus: JobcanStatus | null;
+  jobcanTitle: string | null;
+  jobcanAppliedAt: string | null;
+  jobcanApprovedAt: string | null;
+  jobcanSyncedAt: string | null;
   shop: { id: string; name: string; mallId: string; mall: { id: string; name: string } } | null;
 }
 
@@ -93,6 +101,12 @@ function toProduct(r: ProductRow): ProductRecord {
     coupon: r.couponData,
     createdAt: r.createdAt,
     updatedAt: r.updatedAt,
+    jobcanRequestId: r.jobcanRequestId,
+    jobcanStatus: r.jobcanStatus,
+    jobcanTitle: r.jobcanTitle,
+    jobcanAppliedAt: r.jobcanAppliedAt,
+    jobcanApprovedAt: r.jobcanApprovedAt,
+    jobcanSyncedAt: r.jobcanSyncedAt,
   };
 }
 

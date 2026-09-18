@@ -227,7 +227,10 @@ returns trigger
 language plpgsql
 as $$
 begin
-  new."updatedBy" = auth.uid();
+  -- auth.uid() が null になるのは、人ではなく仕組みが更新したとき
+  -- （ジョブカン連携の定期取り込みなど）。その場合は前回の更新者を残す。
+  -- null で上書きすると「誰が触ったか分からない商品」ができてしまうため。
+  new."updatedBy" = coalesce(auth.uid(), old."updatedBy");
   return new;
 end;
 $$;

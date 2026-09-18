@@ -108,7 +108,34 @@ export interface ProductRecord {
   coupon: GroupData;
   createdAt?: string;
   updatedAt?: string;
+  // ジョブカンワークフローから取り込んだ稟議の情報（docs/jobcan.md）。
+  // 連携していない、または稟議が見つかっていない商品では未設定。
+  jobcanRequestId?: number | null;
+  jobcanStatus?: JobcanStatus | null;
+  jobcanTitle?: string | null;
+  jobcanAppliedAt?: string | null;
+  jobcanApprovedAt?: string | null;
+  jobcanSyncedAt?: string | null;
 }
+
+// ジョブカン側の申請書ステータス。アプリのstatusに写せない状態（差戻し等）もそのまま保持する
+export type JobcanStatus =
+  | 'in_progress'
+  | 'completed'
+  | 'rejected'
+  | 'returned'
+  | 'canceled_after_completion';
+
+export const JOBCAN_STATUS_LABEL: Record<JobcanStatus, string> = {
+  in_progress: '申請中',
+  completed: '承認完了',
+  rejected: '否決',
+  returned: '差戻し',
+  canceled_after_completion: '完了後取消',
+};
+
+// ジョブカンの申請書を直接開くURLの形式は未確認のため、リンクは張らず申請書IDだけを表示している。
+// 実際の稟議画面のURLが分かったら、ここにURLを組み立てる関数を足して商品詳細からリンクする。
 
 export interface SiteFeeOther {
   desc: string;

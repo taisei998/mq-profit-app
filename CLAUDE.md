@@ -92,6 +92,10 @@ npm run test --workspace=packages/shared   # 計算ロジック（46件）
 
 改修時に同じ罠を踏まないよう記録しておく。
 
+- **無料プランのSupabaseは1週間使われないと勝手に停止する。** ドメインごと解決できなくなり、
+  画面には「Failed to fetch」としか出ない。データは消えていない（ダッシュボードから再開する）。
+  再発防止に3日おきの定期アクセスを入れてある（`.github/workflows/keepalive.yml` と
+  `supabase/05_keepalive.sql` はセット）。詳細は `docs/deploy.md`。
 - **Supabaseは WHERE句の無い `DELETE` を拒否する**（`DELETE requires a WHERE clause`）。
   DB関数の中でも効く。一時テーブルの初期化で踏んだ。
 - **接続プール環境では一時テーブルを使わない。** 状態が読みにくい。関数に切り出すこと。

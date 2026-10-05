@@ -1,7 +1,8 @@
 import 'dotenv/config';
-import { dateKey, timeZone } from './day.js';
+import { clockHHMM, dateKey, timeZone } from './day.js';
 import { cellA1, findDateRow, layoutFromEnv, parseAsinRow, type AsinSlot } from './layout.js';
 import {
+  columnIndex,
   columnLetter,
   describeSheet,
   isSheetsConfigured,
@@ -36,6 +37,20 @@ function requireEnv(key: string): string {
     throw new SheetsConfigError(`.env に ${key} を設定してください。手順は docs/bsr-tracking.md を参照。`);
   }
   return v.trim();
+}
+
+// 「最終更新」の記入先。既定はB1で、見出し「最終更新」は左どなりのA1に入れる。
+// SEO順位タブと同じ見た目に揃えてある。使わないときは .env で BSR_UPDATED_CELL="none"。
+function updatedCellConfig(): { valueCell: string; labelCell: string | null } | null {
+  const raw = (process.env.BSR_UPDATED_CELL ?? 'B1').trim();
+  if (raw === '' || raw.toLowerCase() === 'none') return null;
+  const m = /^([A-Z]{1,3})([1-9]\d*)$/.exec(raw.replace(/\$/g, '').toUpperCase());
+  if (!m) {
+    throw new Error(`.env の BSR_UPDATED_CELL は "B1" のような単一セルで指定してください（現在: ${raw}）`);
+  }
+  const col = columnIndex(m[1]);
+  const row = Number(m[2]);
+  return { valueCell: cellA1(col, row), labelCell: col > 0 ? cellA1(col - 1, row) : null };
 }
 
 // classificationRanks は複数返ることがあるので、最も順位の良いものを代表値にする
@@ -144,6 +159,25 @@ async function main(): Promise<number> {
   // 見出し行が空なら「大カテゴリ / サブ」を入れておく（初回だけ効く）
   const labelUpdates = await buildLabelUpdates(target, layout, slots);
   updates.push(...labelUpdates);
+
+  // 最終更新。1件でも取れたときだけ書く。
+  // 一部失敗したのに「全部取れた」と誤解されないよう、失敗件数も添える（SEO順位タブと同じ）。
+  const stampCell = updatedCellConfig();
+  if (stampCell && ok > 0) {
+    const stamp =
+      ng === 0
+        ? `${today} ${clockHHMM()}`
+        : `${today} ${clockHHMM()}（${targets.length}件中${ng}件が取得失敗）`;
+    updates.push({ a1: stampCell.valueCell, values: [[stamp]] });
+
+    // 見出しは空のときだけ入れる（利用者が別の文言にしていたら尊重する）
+    if (stampCell.labelCell) {
+      const current = (await readRange(target, stampCell.labelCell))[0]?.[0];
+      if (current == null || String(current).trim() === '') {
+        updates.push({ a1: stampCell.labelCell, values: [['最終更新']] });
+      }
+    }
+  }
 
   await writeRanges(target, updates);
 

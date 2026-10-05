@@ -1,0 +1,53 @@
+# Supabaseを休止させないための定期アクセス
+#
+# 無料プランのSupabaseは、1週間まったく使われないとプロジェクトが自動で停止します。
+# 停止するとドメインごと消えるため、アプリを開いた人には「Failed to fetch」としか出ません。
+# （2026-10-05に実際にこれで止まりました）
+#
+# このツールは毎日使うものではないので、3日おきに軽いリクエストを送って
+# 「使われている」状態を保ちます。読み取りもしない空振りのリクエストです。
+#
+# 不要になったら（有料プランにした等）このファイルを削除してください。
+
+name: Supabase keepalive
+
+on:
+  schedule:
+    # 3日おき 日本時間の朝9時ごろ（UTC 0:00）
+    - cron: '0 0 */3 * *'
+  # 手で確認したいとき用
+  workflow_dispatch:
+
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Supabaseに軽くアクセスする
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
+        run: |
+          set -euo pipefail
+
+          # supabase/05_keepalive.sql で作った ping() を呼ぶ。
+          # 返るのは現在時刻だけで、テーブルには触れません。
+          # 「データベースに届く」ことが大事なので、認証サービスではなくDB側を叩きます。
+          code=$(curl -s -o /tmp/body -w '%{http_code}' --max-time 30 \
+            -X POST \
+            -H "apikey: ${SUPABASE_ANON_KEY}" \
+            -H "Authorization: Bearer ${SUPABASE_ANON_KEY}" \
+            -H "Content-Type: application/json" \
+            -d '{}' \
+            "${SUPABASE_URL}/rest/v1/rpc/ping" || echo 000)
+
+          echo "HTTP ${code}"
+          cat /tmp/body || true
+
+          if [ "${code}" = "000" ]; then
+            echo "::error::Supabaseに接続できませんでした。プロジェクトが停止している可能性があります。ダッシュボードから再開してください。"
+            exit 1
+          fi
+          if [ "${code}" -ge 400 ]; then
+            echo "::error::Supabaseがエラーを返しました (HTTP ${code})。"
+            exit 1
+          fi

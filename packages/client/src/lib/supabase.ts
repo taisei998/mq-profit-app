@@ -38,6 +38,16 @@ export function toMessage(error: { message?: string; code?: string; hint?: strin
   if (error.code === '42501' || raw.includes('row-level security')) {
     return '権限がありません。ログインし直すか、管理者に権限の付与を依頼してください。';
   }
+  // サーバーに届いていない（＝認証やデータの問題ではない）。
+  // 無料プランのSupabaseは1週間使われないと自動で停止するため、しばらく空いたあとに起きやすい。
+  // 「Failed to fetch」のままだと何をすればいいか分からないので、対処を書く。
+  if (raw.includes('Failed to fetch') || raw.includes('NetworkError') || raw.includes('fetch failed')) {
+    return (
+      'サーバーに接続できませんでした。ネットワークを確認しても直らない場合は、' +
+      'データベースが休止している可能性があります（しばらく使われないと自動で停止します）。' +
+      '管理者にSupabaseの再開を依頼してください。'
+    );
+  }
   // トリガーで raise exception した日本語メッセージはそのまま出す
   return raw || '処理に失敗しました。';
 }

@@ -26,3 +26,7 @@ packages/bsr/rank-targets.json
 .vscode/
 .DS_Store
 Thumbs.db
+
+# 開発用データベース（手元だけ。消せば初期状態に戻る）
+.devdb/
+packages/server/.devdb/

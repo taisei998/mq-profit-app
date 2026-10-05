@@ -1,205 +1,142 @@
-import { cloneGroup, computeGroupFromLines, emptyGroup, GroupData, groupHasInput, ProductRecord, ProductStatus, STATUS_LABEL } from '@ec-ai/shared';
+// 商品（粗利）。
+//
+// 【計算をどこでやるか】
+//   粗利の計算は**ブラウザ側**（@ec-ai/shared）で行い、サーバーは結果を保存するだけです。
+//   本番のコンテナはCPU 256・メモリ512と小さく、重い処理でCPUを使い切ると
+//   ヘルスチェックまで時間内に返せなくなり、基盤に「停止した」と判断されて
+//   コンテナごと入れ替えられます（＝その時使っている全員が巻き添えになる）。
+//   アプリ実装ガイドライン3章。
+
 import { Router } from 'express';
-import { prisma } from '../db.js';
-import { asyncHandler } from '../lib/asyncHandler.js';
-import { HttpError } from '../middleware/errorHandler.js';
-import { fromJsonString, toJsonString } from '../lib/json.js';
-import { idParamSchema, productInputSchema, productStatusInputSchema } from '../lib/validation.js';
-import { currentUserId } from '../middleware/auth.js';
-import type { Mall, Product, Shop } from '@prisma/client';
+import { many, one } from '../db.js';
+import { nullableStr, num, str, wrap, type AuthedRequest } from './helpers.js';
 
-// 一覧・詳細では店舗とモールを一緒に引く（画面でモール名・店舗名を出すため）
-type ProductWithShop = Product & { shop: Shop & { mall: Mall } };
-const withShop = { shop: { include: { mall: true } } } as const;
+// 商品1件を画面用の形で取るクエリ。モール・店舗名も一緒に引く
+const SELECT = `
+  select p.id, p."productId", p."mgmtNo", p.code, p."shopId", p.name, p.spec, p.note,
+         p.category, p."priceTaxRate", p."setCount", p.status,
+         p."createdBy", p."updatedBy", p."createdAt", p."updatedAt",
+         p."normalData" as normal, p."saleData" as sale, p."couponData" as coupon,
+         p."jobcanRequestId", p."jobcanStatus", p."jobcanTitle",
+         p."jobcanAppliedAt", p."jobcanApprovedAt", p."jobcanSyncedAt",
+         s.name as "shopName", s."mallId", m.name as "mallName"
+    from public.products p
+    join public.shops s on s.id = p."shopId"
+    join public.malls m on m.id = s."mallId"
+`;
 
-export const productsRouter = Router();
+export function productsRouter(): Router {
+  const r = Router();
 
-function toRecord(p: ProductWithShop): ProductRecord {
-  return {
-    id: p.id,
-    productId: p.productId,
-    mgmtNo: p.mgmtNo,
-    status: p.status as ProductStatus,
-    createdBy: p.createdBy,
-    updatedBy: p.updatedBy,
-    code: p.code,
-    shopId: p.shopId,
-    shopName: p.shop.name,
-    mallId: p.shop.mallId,
-    mallName: p.shop.mall.name,
-    name: p.name,
-    spec: p.spec,
-    note: p.note,
-    category: p.category,
-    priceTaxRate: p.priceTaxRate,
-    setCount: p.setCount,
-    normal: fromJsonString<GroupData>(p.normalData, emptyGroup(p.priceTaxRate)),
-    sale: fromJsonString<GroupData>(p.saleData, emptyGroup(p.priceTaxRate)),
-    coupon: fromJsonString<GroupData>(p.couponData, emptyGroup(p.priceTaxRate)),
-    createdAt: p.createdAt.toISOString(),
-    updatedAt: p.updatedAt.toISOString(),
-  };
-}
+  r.get(
+    '/',
+    wrap(async (_req, res) => {
+      res.json(await many(`${SELECT} order by p."productId"`));
+    })
+  );
 
-// 固有ID採番 (A0001, A0002, ...)。既存の最大値の続きから発番する。
-async function nextProductId(): Promise<string> {
-  const products = await prisma.product.findMany({ select: { productId: true } });
-  let maxN = 0;
-  for (const p of products) {
-    const m = /^A(\d+)$/.exec(p.productId || '');
-    if (m) {
-      const n = parseInt(m[1], 10);
-      if (n > maxN) maxN = n;
-    }
-  }
-  return 'A' + String(maxN + 1).padStart(4, '0');
-}
-
-productsRouter.get(
-  '/',
-  asyncHandler(async (_req, res) => {
-    const products = await prisma.product.findMany({
-      orderBy: { productId: 'asc' },
-      include: withShop,
-    });
-    res.json(products.map(toRecord));
-  })
-);
-
-// 空グループ（新規フォームの初期値取得などクライアント側の便宜用）
-// ※ "/:id" より前に定義すること（順序を逆にすると "util" がidとして拾われる）
-productsRouter.get(
-  '/util/empty-group',
-  asyncHandler(async (req, res) => {
-    const taxRate = Number(req.query.priceTaxRate ?? 10);
-    res.json(emptyGroup(taxRate));
-  })
-);
-
-productsRouter.get(
-  '/:id',
-  asyncHandler(async (req, res) => {
-    const { id } = idParamSchema.parse(req.params);
-    const product = await prisma.product.findUnique({ where: { id }, include: withShop });
-    if (!product) throw new HttpError(404, '商品が見つかりません。');
-    res.json(toRecord(product));
-  })
-);
-
-productsRouter.post(
-  '/',
-  asyncHandler(async (req, res) => {
-    const input = productInputSchema.parse(req.body);
-
-    if (!groupHasInput(input.normalLines)) {
-      throw new HttpError(400, '「通常時」1セットの販売金額を入力してください。');
-    }
-    const normal = computeGroupFromLines(input.normalLines, input.priceTaxRate);
-    const sale =
-      input.saleLines && groupHasInput(input.saleLines)
-        ? computeGroupFromLines(input.saleLines, input.priceTaxRate)
-        : cloneGroup(normal);
-    const coupon =
-      input.couponLines && groupHasInput(input.couponLines)
-        ? computeGroupFromLines(input.couponLines, input.priceTaxRate)
-        : cloneGroup(sale);
-
-    const shop = await prisma.shop.findUnique({ where: { id: input.shopId } });
-    if (!shop) throw new HttpError(400, '選択された店舗が見つかりません。');
-
-    // 同じ店舗に同じ商品コードがあれば上書き。別店舗の同じコードは別商品として扱う（#11）
-    const where = { shopId_code: { shopId: input.shopId, code: input.code } };
-    const existing = await prisma.product.findUnique({ where });
-    const productId = existing ? existing.productId : await nextProductId();
-    const userId = currentUserId(req);
-
-    const saved = await prisma.product.upsert({
-      where,
-      include: withShop,
-      create: {
-        productId,
-        shopId: input.shopId,
-        mgmtNo: input.mgmtNo || null,
-        status: input.status,
-        createdBy: userId,
-        updatedBy: userId,
-        code: input.code,
-        name: input.name,
-        spec: input.spec,
-        note: input.note,
-        category: input.category,
-        priceTaxRate: input.priceTaxRate,
-        setCount: input.setCount,
-        normalData: toJsonString(normal),
-        saleData: toJsonString(sale),
-        couponData: toJsonString(coupon),
-      },
-      update: {
-        mgmtNo: input.mgmtNo || null,
-        status: input.status,
-        updatedBy: userId,
-        name: input.name,
-        spec: input.spec,
-        note: input.note,
-        category: input.category,
-        priceTaxRate: input.priceTaxRate,
-        setCount: input.setCount,
-        normalData: toJsonString(normal),
-        saleData: toJsonString(sale),
-        couponData: toJsonString(coupon),
-      },
-    });
-
-    res.status(existing ? 200 : 201).json(toRecord(saved));
-  })
-);
-
-// ステータスだけを変える（稟議申請・承認・却下・販売中・販売終了）。
-// 稟議そのものはジョブカンで回すため、ここでは状態の記録だけを行う（2026-09-16決定 #10）。
-const label = (s: string): string => STATUS_LABEL[s as ProductStatus] ?? s;
-
-const ALLOWED_TRANSITIONS: Record<string, string[]> = {
-  draft: ['pending'],
-  pending: ['approved', 'rejected'],
-  approved: ['selling', 'draft'],
-  rejected: ['draft'],
-  selling: ['ended'],
-  ended: ['selling'],
-};
-
-productsRouter.patch(
-  '/:id/status',
-  asyncHandler(async (req, res) => {
-    const { id } = idParamSchema.parse(req.params);
-    const { status } = productStatusInputSchema.parse(req.body);
-
-    const existing = await prisma.product.findUnique({ where: { id }, include: withShop });
-    if (!existing) throw new HttpError(404, '商品が見つかりません。');
-
-    const allowed = ALLOWED_TRANSITIONS[existing.status] ?? [];
-    if (existing.status !== status && !allowed.includes(status)) {
-      throw new HttpError(
-        400,
-        `「${label(existing.status)}」から「${label(status)}」には変更できません。`
+  // 受注CSVの突き合わせ用。商品コードから原価情報を引くための一覧
+  r.get(
+    '/lookup',
+    wrap(async (req, res) => {
+      const shopId = str(req.query.shopId, '店舗');
+      res.json(
+        await many(
+          `select id, code, name, category,
+                  "normalData" as normal, "saleData" as sale, "couponData" as coupon
+             from public.products where "shopId" = $1`,
+          [shopId]
+        )
       );
-    }
+    })
+  );
 
-    const saved = await prisma.product.update({
-      where: { id },
-      data: { status, updatedBy: currentUserId(req) },
-      include: withShop,
-    });
-    res.json(toRecord(saved));
-  })
-);
+  r.get(
+    '/:id',
+    wrap(async (req, res) => {
+      const row = await one(`${SELECT} where p.id = $1`, [req.params.id]);
+      if (!row) {
+        res.status(404).json({ error: '商品が見つかりません。' });
+        return;
+      }
+      res.json(row);
+    })
+  );
 
-productsRouter.delete(
-  '/:id',
-  asyncHandler(async (req, res) => {
-    const { id } = idParamSchema.parse(req.params);
-    const existing = await prisma.product.findUnique({ where: { id } });
-    if (!existing) throw new HttpError(404, '商品が見つかりません。');
-    await prisma.product.delete({ where: { id } });
-    res.status(204).send();
-  })
-);
+  /**
+   * 登録・更新。同じ店舗に同じ商品コードがあれば上書きする。
+   * 固有ID(A0001...) と createdBy は**上書きしない**（元の登録者を残すため）。
+   */
+  r.post(
+    '/',
+    wrap(async (req: AuthedRequest, res) => {
+      const b = req.body ?? {};
+      const row = await one(
+        `insert into public.products
+           ("shopId", code, "mgmtNo", status, name, spec, note, category,
+            "priceTaxRate", "setCount", "normalData", "saleData", "couponData",
+            "createdBy", "updatedBy")
+         values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$14)
+         on conflict ("shopId", code) do update
+           set "mgmtNo" = excluded."mgmtNo",
+               status = excluded.status,
+               name = excluded.name,
+               spec = excluded.spec,
+               note = excluded.note,
+               category = excluded.category,
+               "priceTaxRate" = excluded."priceTaxRate",
+               "setCount" = excluded."setCount",
+               "normalData" = excluded."normalData",
+               "saleData" = excluded."saleData",
+               "couponData" = excluded."couponData",
+               "updatedBy" = excluded."updatedBy"
+         returning id`,
+        [
+          str(b.shopId, '店舗'),
+          str(b.code, '商品コード'),
+          nullableStr(b.mgmtNo),
+          typeof b.status === 'string' ? b.status : 'draft',
+          str(b.name, '商品名'),
+          nullableStr(b.spec),
+          nullableStr(b.note),
+          str(b.category, 'カテゴリ'),
+          num(b.priceTaxRate ?? 10, '税率'),
+          num(b.setCount ?? 5, 'セット数'),
+          JSON.stringify(b.normal ?? {}),
+          JSON.stringify(b.sale ?? {}),
+          JSON.stringify(b.coupon ?? {}),
+          req.user?.id ?? null,
+        ]
+      );
+      res.json(await one(`${SELECT} where p.id = $1`, [(row as { id: string }).id]));
+    })
+  );
+
+  /**
+   * ステータス変更。
+   * 2026-09-17決定: ログインしている人なら誰でも変更できる。
+   * 稟議そのものはジョブカンで回しており、ここは記録するだけのため。
+   * ただし**遷移の順序**はDB側のトリガーが強制する。
+   */
+  r.post(
+    '/:id/status',
+    wrap(async (req: AuthedRequest, res) => {
+      await one(`update public.products set status = $2, "updatedBy" = $3 where id = $1 returning id`, [
+        req.params.id,
+        str(req.body?.status, 'ステータス'),
+        req.user?.id ?? null,
+      ]);
+      res.json(await one(`${SELECT} where p.id = $1`, [req.params.id]));
+    })
+  );
+
+  r.delete(
+    '/:id',
+    wrap(async (req, res) => {
+      await one(`delete from public.products where id = $1 returning id`, [req.params.id]);
+      res.json({ ok: true });
+    })
+  );
+
+  return r;
+}

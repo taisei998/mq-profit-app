@@ -350,7 +350,8 @@ function ProductRow({
           )}
         </td>
         {/* 粗利率は「通常時・1セット」の税込粗利率を代表値として出す */}
-        <td>{p.normal.rates[0] == null ? '—' : `${p.normal.rates[0].toFixed(1)}%`}</td>
+        {/* 1件でも中身が欠けた商品があると一覧全体が真っ白になるため、ここは必ず素通しできる形にする */}
+        <td>{p.normal?.rates?.[0] == null ? '—' : `${p.normal.rates[0].toFixed(1)}%`}</td>
         <td style={{ whiteSpace: 'nowrap' }}>{p.updatedAt ? p.updatedAt.slice(0, 10) : '—'}</td>
         <td style={{ textAlign: 'left', whiteSpace: 'nowrap' }}>
           <button className="mini" onClick={onToggle}>

@@ -1,0 +1,27 @@
+# 「全部除外してから、必要なものだけ許可する」書き方。
+# あとからルート直下にファイルが増えても、除外し忘れが起きない（コンテナ化規約1章）。
+*
+
+!/package.json
+!/package-lock.json
+!/docker-entrypoint.sh
+
+!/db/migrations
+!/db/migrations/**
+
+!/packages/shared
+!/packages/shared/**
+!/packages/server
+!/packages/server/**
+!/packages/client
+!/packages/client/**
+!/packages/bsr/package.json
+
+# 上の「ディレクトリごと許可」は、その中に実在するファイルを無条件に含める。
+# gitで無視していても、手元にある実ファイルはイメージに入ってしまうので個別に除外する。
+**/node_modules
+**/dist
+**/.env
+**/.env.*
+!**/.env.example
+**/.devdb

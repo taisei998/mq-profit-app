@@ -3,13 +3,16 @@
 EC（楽天・Yahoo!・au PAY・Amazon・自社EC）で売る商品の**粗利率を計算し、受注CSVを取り込んで集計する社内ツール**。
 経営判断に使う数字なので、**計算が1円でもずれると業務に影響する**。
 
+**2026-10-05から、社内アプリ基盤（ローカルアプリプラットフォーム）の動的レーンへ移行中。**
+以前のSupabase＋GitHub Pages構成は規約に反していたため作り直した。経緯は `docs/design-gap.md`。
+
 ## 最初に読むもの
 
 | ファイル | 内容 |
 |---|---|
-| `docs/design-gap.md` | **何をなぜそう決めたかの記録。改修前に必ず読む。** 決定事項に番号が振ってある（#1〜#17） |
-| `docs/deploy.md` | 公開の手順とセキュリティ上の禁止事項 |
-| `docs/jobcan.md` | ジョブカンワークフロー連携（稟議ステータスの自動取り込み）の設定と仕様 |
+| `docs/platform.md` | **社内アプリ基盤の規約の要点。実装前に必ず読む。** 原典は https://docs.apps.lo-cal.work/ |
+| `docs/design-gap.md` | **何をなぜそう決めたかの記録。改修前に必ず読む。** 決定事項に番号が振ってある |
+| `docs/jobcan.md` | ジョブカンワークフロー連携（稟議ステータスの自動取り込み） |
 | `MQ率計算アプリ_設計書.md`（リポジトリ外） | 発注元の設計書。計算ロジックの原典 |
 
 ## 絶対に守ること
@@ -18,56 +21,64 @@ EC（楽天・Yahoo!・au PAY・Amazon・自社EC）で売る商品の**粗利�
    設計書§3の式そのもので、`calc.test.ts` の「設計書§6.1 必須テストケース」で固定してある。
    テストが赤くなったらそれは仕様変更。**テストの方を書き換えて通すのは禁止。**
 
-2. **新しいテーブルを作ったら必ずRLSを設定する。**
-   このアプリはGitHub Pagesから直接Supabaseに繋ぐ。画面に埋め込まれるanonキーは公開されているので、
-   **RLSが唯一のアクセス制御**。付け忘れたテーブルはログインすれば誰でも読める。
-   `supabase/01_schema.sql` の「7. アクセス制御（RLS）」と「8. GRANT」の両方に追記すること。
+2. **アクセス制御はサーバー側（`packages/server/src/routes/index.ts`）で行う。**
+   以前はDBのRLSが唯一の防御だったが、共有RDSには利用者ごとのDBロールが無く同じようには効かない。
+   **`apiRouter()` の requireAuth を通さないルートを `/api` 配下に足さないこと。**
 
-3. **`service_role` キーをコードにもリポジトリにも入れない。** RLSを無視できてしまう。
-   Edge Function の中で `Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')` を読むのは可（Supabaseが
-   実行時に渡すもので、リポジトリには入らない）。外部サービスのAPIキーも同じ扱いで、
-   **必ずEdge Functionのシークレットに置く**。画面側（`VITE_*`）に置くと公開JSに埋まる。
+3. **秘密情報をリポジトリにもイメージにも入れない。**
+   必要な値は起動時に環境変数で受け取る（基盤が入れてくれる。自分でSecrets Managerを読みに行かない）。
+   `.env.example` にはダミー値だけを書く。**画面側に秘密を置かない**（公開JSに埋まる）。
 
 4. **一括削除機能を作らない。** 事故防止のため旧アプリでも撤去済み（設計書§5.3・§9）。
    取込単位の取消（`import_batches` の削除）だけ許可している。
 
-5. **このリポジトリは公開されている。** ソースもdocsも誰でも読める。社外秘の値を書かない。
+5. **重い処理をサーバーでやらない。**
+   本番はCPU 256・メモリ512のコンテナ1台。CPUを使い切るとヘルスチェックが5秒以内に返せず、
+   基盤が「停止した」と判断してコンテナを入れ替える。**1人の重い操作で全員が巻き添えになる。**
+   粗利の計算と受注CSVの集計は**ブラウザ側**（`packages/shared`）でやる。この配置を崩さないこと。
 
 ## 構成
 
 ```
-画面（GitHub Pages）  →  Supabase（PostgreSQL + 認証）
+ブラウザ → ALB → コンテナ1つ（Node/Express, 8080番）→ 共有RDS（PostgreSQL）
+                   ├ 画面（Viteでビルドした静的ファイル）
+                   ├ /api/*     業務API（ログイン必須）
+                   ├ /auth/*    社内認証システム（OAuth2 + PKCE）
+                   └ /healthz   ヘルスチェック
 ```
-
-自前のサーバーは無い。費用ゼロで「リンク1つ」で使えるようにするための構成（#経緯は design-gap.md §1）。
 
 ```
 packages/
-  shared/   計算ロジックと型。フロントとサーバー双方から使う。テストもここ
-  client/   画面（React + TypeScript + Vite）。これが本体
-  server/   旧構成（Express + Prisma + SQLite）。★公開版では未使用。参考用に残置
+  shared/   計算ロジックと型。画面とサーバー双方から使う。テストもここ
+  client/   画面（React + TypeScript + Vite）
+  server/   サーバー（Express + pg）。★ここが本体になった
   bsr/      Amazon BSR・検索順位の記録バッチ。このアプリとは無関係に動く
-supabase/   DBスキーマ・RLS・DB側の関数（SQL Editorに貼って実行する）
-  functions/  Edge Function（外部APIを叩く処理。キーを画面に出さないためここに置く）
+db/migrations/  DBスキーマ（SQL）。`migrate` コマンドで流す
 docs/       設計メモ
+supabase/   ★旧構成の名残。動的レーンでは使わない（移行完了後に消す）
 legacy/     旧・単一HTML版（参考用）
 ```
 
-**`packages/server` は触らなくてよい。** 変更しても公開版には反映されない。
-
 ## 開発の流れ
+
+**ソフトのインストールは不要。** npmのライブラリだけで、本番と同じPostgreSQLが手元で動く。
 
 ```bash
 npm install
-cp packages/client/.env.example packages/client/.env.local   # 接続先を記入（下記）
-npm run build --workspace=packages/shared                     # 先にsharedをビルド
-npm run dev --workspace=packages/client                       # http://localhost:5173
+npm run build --workspace=packages/shared
+
+# 1つ目のウィンドウ: 開発用データベース（開いたままにする）
+npm run dev:db
+
+# 2つ目のウィンドウ: サーバーと画面
+cp packages/server/.env.example packages/server/.env
+npm run dev --workspace=packages/server   # http://localhost:8080
+npm run dev --workspace=packages/client   # http://localhost:5173（/api は8080へ中継）
 ```
 
-`.env.local` に入れる `VITE_SUPABASE_URL` と `VITE_SUPABASE_ANON_KEY` は、
-Supabaseダッシュボードの Settings → API から取得する（anonキーは公開前提の鍵なので秘密ではない）。
-
-**手元の開発も公開版と同じSupabaseに繋がる。** 試したデータは本番に入るので注意。
+開発用DBの正体は **PGlite**（PostgreSQL本体をWebAssemblyにしたもの）。
+PostgreSQLの通信規約をそのまま喋るので、**本番とまったく同じ `pg` ドライバで繋がる**。
+「開発のときだけ別の仕組みで動く」状態にはなっていない。データは `.devdb` に入る（消せば初期化）。
 
 ### テスト
 
@@ -77,37 +88,40 @@ npm run test --workspace=packages/shared   # 計算ロジック（46件）
 
 計算まわりを触ったら必ず走らせる。
 
-### 公開
-
-`main` に push すると GitHub Actions が自動でビルドして公開する。
-公開先: https://taisei998.github.io/mq-profit-app/
-
 ### DBを変更するとき
 
-`supabase/*.sql` を編集し、**Supabaseの SQL Editor に貼って実行する**（自動反映はされない）。
-すべて `create or replace` / `if not exists` で書いてあり、**何度実行してもデータは消えない**。
-この性質は維持すること。
+`db/migrations/` に**新しい番号のファイルを足す**（既存ファイルを書き換えない）。
+`create or replace` / `if not exists` で書き、**何度実行してもデータが消えない**性質を保つこと。
+
+**後方互換（expand-contract）で書く。** 列の追加はよいが、リネーム・削除・型変更・NOT NULL化を
+1回で直接やらない。デプロイ中は新旧のコンテナが短時間混在し、ロールバックしてもDBは戻らない。
+
+### 本番用コンテナ
+
+```bash
+docker build -f Dockerfile.production -t mq-profit:latest .
+```
+
+このコマンドで必ずビルドできる状態を保つこと（DXとCIがこの形で叩く）。
 
 ## 過去に踏んだ落とし穴
 
-改修時に同じ罠を踏まないよう記録しておく。
-
-- **無料プランのSupabaseは1週間使われないと勝手に停止する。** ドメインごと解決できなくなり、
-  画面には「Failed to fetch」としか出ない。データは消えていない（ダッシュボードから再開する）。
-  再発防止に3日おきの定期アクセスを入れてある（`.github/workflows/keepalive.yml` と
-  `supabase/05_keepalive.sql` はセット）。詳細は `docs/deploy.md`。
-- **Supabaseは WHERE句の無い `DELETE` を拒否する**（`DELETE requires a WHERE clause`）。
-  DB関数の中でも効く。一時テーブルの初期化で踏んだ。
-- **接続プール環境では一時テーブルを使わない。** 状態が読みにくい。関数に切り出すこと。
+- **PGliteの同時接続数は既定で1。** `maxConnections` を広げないと、接続プールの2本目以降が
+  いきなり切断される（原因が「ECONNRESET」としか出ないので分かりにくい）。
 - **`toISOString()` はUTCに変換する。** 日本時間の「9月1日 00:00」が「8月31日」になる。
   日付を文字列にするときは `localDate()`（`HomePage.tsx`）のようにローカル値から組む。
 - **`orders.orderDate` は `YYYY-MM-DD` の文字列**。日付型にするとタイムゾーンで前日にずれる。
   辞書順＝日付順なので範囲検索はできる。
 - **`.map(parseCSVLine)` と書かない。** 第2引数に配列の添字が渡って区切り文字が壊れる。
 - **`packages/shared` は先にビルドする。** client/server の型チェックが `dist` を見るため。
-- **Supabaseの埋め込みリレーションは配列型として推論される。** `as unknown as` でキャストが要る。
+- **商品の明細が欠けていると一覧が真っ白になった**（`p.normal.rates[0]`）。
+  1件の壊れたデータで画面全体が落ちるので、表示側は必ず素通しできる書き方にする。
 - **ジョブカンAPIの `Authorization: Token xxx` の「Token」はそのまま書く文字列。**
   置き換える箇所だと思って消すと401になる。
+- **社内認証の `permissions` 判定**: `<アプリ名>.*` を持つ人の配列に `<アプリ名>.access` は
+  **入らない**。access だけを見ると、権限を一番多く持つ人だけログインできなくなる。
+- **ログアウトはアプリ側のセッション破棄とゲートウェイへのリダイレクトの両方。**
+  片方だけだと、次の認可リクエストで確認なく再ログインが成立する。
 - **受注CSVはモールごとに全く違う。** Amazonはタブ区切りの `.txt`、単価の列が無い、
   キャンセル行が混ざる。楽天は注文日と時間が別列。詳細は design-gap.md §6。
 
@@ -128,3 +142,4 @@ npm run test --workspace=packages/shared   # 計算ロジック（46件）
 | セット | 1〜5セット。同じ商品を複数買ったときの価格帯 |
 | モール / 店舗 | 楽天市場（モール）に「くまもと風土」など複数の店舗が入る2階層 |
 | 稟議 | 商品登録の承認フロー。実体はジョブカンワークフローで回し、このアプリは状態を写し取るだけ。<br>ジョブカンのAPIは参照専用なので、**アプリから申請は出せない**（`docs/jobcan.md`） |
+| レーン | 社内アプリ基盤の公開方式。このアプリは**動的レーン**（サーバーあり） |

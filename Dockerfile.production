@@ -1,0 +1,81 @@
+# 本番用イメージ。
+#
+# 固定のコマンドでビルドできること（コンテナ化規約1章）:
+#   docker build -f Dockerfile.production -t mq-profit:latest .
+#
+# 【気をつけた点】
+#   - マルチステージ必須。ビルド用の道具を最終イメージに残さない（7章）
+#   - 非rootで実行する（Dockerfile作成時の追加ガイドライン）
+#   - ベースイメージのタグはバージョン番号を含まない追従型にする。
+#     固定タグはその系列が世代交代した時点で中身が二度と更新されなくなるため
+#   - 共有DBはTLS必須なので、RDSのCA証明書を同梱する（4章）
+
+# ============================================================
+# ビルド
+# ============================================================
+FROM node:slim AS build
+
+WORKDIR /app
+
+# 依存の解決だけ先にやると、コードを直しただけのときにキャッシュが効く
+COPY package.json package-lock.json ./
+COPY packages/shared/package.json  packages/shared/package.json
+COPY packages/server/package.json  packages/server/package.json
+COPY packages/client/package.json  packages/client/package.json
+COPY packages/bsr/package.json     packages/bsr/package.json
+RUN npm ci --ignore-scripts
+
+COPY packages/shared packages/shared
+COPY packages/server packages/server
+COPY packages/client packages/client
+
+# shared を先にビルドする（server と client の型チェックが dist を見るため）
+RUN npm run build --workspace=packages/shared \
+ && npm run build --workspace=packages/server \
+ && npm run build --workspace=packages/client
+
+# ここから先は本番で使わない依存を落とす。
+# 最終イメージへ持ち込むのはこの node_modules だけ
+RUN npm prune --omit=dev
+
+# ============================================================
+# 実行
+# ============================================================
+FROM node:slim AS runtime
+
+# jq と awscli は entrypoint が自己申告設定を取り出すのに使う（コンテナ化規約5章）。
+# ca-certificates はHTTPS通信（社内認証システム・ジョブカン）に要る。
+RUN apt-get update \
+ && apt-get install -y --no-install-recommends jq awscli ca-certificates curl \
+ && rm -rf /var/lib/apt/lists/*
+
+# 共有DB（RDS）のCA証明書バンドル。公開情報でシークレットではない
+RUN mkdir -p /etc/ssl/rds \
+ && curl -fsSL https://truststore.pki.rds.amazonaws.com/global/global-bundle.pem \
+      -o /etc/ssl/rds/global-bundle.pem
+
+WORKDIR /app
+
+COPY --from=build /app/node_modules                 ./node_modules
+COPY --from=build /app/packages/shared/dist         ./packages/shared/dist
+COPY --from=build /app/packages/shared/package.json ./packages/shared/package.json
+COPY --from=build /app/packages/server/dist         ./packages/server/dist
+COPY --from=build /app/packages/server/package.json ./packages/server/package.json
+COPY --from=build /app/packages/client/dist         ./packages/client/dist
+COPY --from=build /app/package.json                 ./package.json
+# マイグレーションのSQL。entrypoint の `migrate` から流す
+COPY db/migrations ./db/migrations
+
+COPY docker-entrypoint.sh /usr/local/bin/docker-entrypoint.sh
+RUN chmod +x /usr/local/bin/docker-entrypoint.sh
+
+# 非rootで動かす。node イメージには最初から node ユーザーがいる
+USER node
+
+# 基盤は PORT を注入しない。規約の既定値に合わせて8080で待ち受ける
+EXPOSE 8080
+
+# ECSの command override は CMD を置き換えるだけで ENTRYPOINT は必ず先に実行される。
+# マイグレーションは `command: ["migrate"]` で呼ばれる
+ENTRYPOINT ["/usr/local/bin/docker-entrypoint.sh"]
+CMD ["node", "packages/server/dist/index.js"]

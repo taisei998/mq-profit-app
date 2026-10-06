@@ -5,8 +5,15 @@ import { OrderAggregationPage } from './pages/OrderAggregationPage.js';
 import { MasterPage } from './pages/MasterPage.js';
 import { HomePage } from './pages/HomePage.js';
 import { LoginPage } from './pages/LoginPage.js';
-import { supabase } from './lib/supabase.js';
-import type { Session } from '@supabase/supabase-js';
+import { api } from './lib/api.js';
+import { goToLogout, NotLoggedIn } from './lib/http.js';
+
+interface Me {
+  id: string;
+  name: string;
+  division: string | null;
+  email: string | null;
+}
 
 type Pane = 0 | 1 | 2 | 3 | 4; // 0=HOME 1=商品一覧 2=粗利作成 3=データアップ 4=マスタ
 
@@ -27,17 +34,36 @@ function today(): string {
 export default function App() {
   const [pane, setPane] = useState<Pane>(0);
   const [loadRequest, setLoadRequest] = useState<LoadRequest | null>(null);
-  const [session, setSession] = useState<Session | null>(null);
+  const [me, setMe] = useState<Me | null>(null);
   const [checking, setChecking] = useState(true);
+  // 社内認証システムが使える状態か。公開前は未設定のことがある
+  const [loginReady, setLoginReady] = useState(true);
 
-  // ログイン状態を監視する。ログアウトやセッション切れも自動で反映される。
+  // ログインしているかをサーバーに聞く。
+  // セッションの実体はCookieなので、ブラウザ側では持たない。
   useEffect(() => {
-    supabase.auth.getSession().then(({ data }) => {
-      setSession(data.session);
-      setChecking(false);
-    });
-    const { data: sub } = supabase.auth.onAuthStateChange((_event, s) => setSession(s));
-    return () => sub.subscription.unsubscribe();
+    let alive = true;
+    api
+      .me()
+      .then((u) => {
+        if (alive) setMe(u);
+      })
+      .catch(async (e) => {
+        if (!alive) return;
+        setMe(null);
+        if (e instanceof NotLoggedIn) {
+          // 401のとき、ログインの準備が整っているかも一緒に返ってくる
+          const res = await fetch('/api/me', { credentials: 'same-origin' }).catch(() => null);
+          const j = await res?.json().catch(() => null);
+          setLoginReady(j?.gatewayReady !== false);
+        }
+      })
+      .finally(() => {
+        if (alive) setChecking(false);
+      });
+    return () => {
+      alive = false;
+    };
   }, []);
 
   function openEdit(id: string) {
@@ -58,15 +84,15 @@ export default function App() {
   }
 
   // 未ログインならログイン画面だけを出す（データは一切読み込まない）
-  if (!session) {
+  if (!me) {
     return (
       <div className="wrap">
-        <LoginPage />
+        <LoginPage ready={loginReady} />
       </div>
     );
   }
 
-  const userLabel = session.user.email ?? 'ログイン中';
+  const userLabel = me.name || me.email || 'ログイン中';
 
   return (
     <div className="wrap">
@@ -81,7 +107,7 @@ export default function App() {
             <span className="user-avatar">{userLabel.slice(0, 1).toUpperCase()}</span>
             {userLabel}
           </span>
-          <button className="mini" onClick={() => supabase.auth.signOut()}>
+          <button className="mini" onClick={goToLogout}>
             ログアウト
           </button>
         </div>

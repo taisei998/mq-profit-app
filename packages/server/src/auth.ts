@@ -222,6 +222,13 @@ export async function handleCallback(req: Request, res: Response, config: Config
     [hash, user!.id, String(config.sessionHours)]
   );
 
+  // 期限切れのセッションと、途中で放棄されたログイン手続きを掃除する。
+  // 定期実行のバッチを別に立てずに済むよう、ログインのついでにやる（数行の削除なので軽い）。
+  // 失敗してもログイン自体は成立させる
+  db()
+    .query('select public.purge_expired_sessions()')
+    .catch((e) => console.error('[auth] 期限切れセッションの掃除に失敗', e));
+
   res.cookie(SESSION_COOKIE, raw, {
     httpOnly: true,
     sameSite: 'lax',

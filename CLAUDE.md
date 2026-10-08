@@ -99,7 +99,7 @@ npm run test --workspace=packages/shared   # 計算ロジック（46件）
 ### 本番用コンテナ
 
 ```bash
-docker build -f Dockerfile.production -t mq-profit:latest .
+docker build -f Dockerfile.production -t ec-mq-profit:latest .
 ```
 
 このコマンドで必ずビルドできる状態を保つこと（DXとCIがこの形で叩く）。

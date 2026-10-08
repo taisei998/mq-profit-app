@@ -7,10 +7,11 @@ EC商品の粗利率・MQ率を計算する社内ツールです。
 
 ## 使う
 
-**https://taisei998.github.io/mq-profit-app/**
+**社内アプリ基盤（動的レーン）へ移行中です。** 公開申請が通ると
+`https://ec-mq-profit.apps.lo-cal.work` で使えるようになり、社内アカウントでログインします。
 
-リンクを開くとログイン画面が出ます。会社のメールアドレスで登録・ログインしてください。
-在宅でも出先でも、ブラウザさえあれば使えます。
+それまでの間は、旧版（ https://taisei998.github.io/mq-profit-app/ ）が最後に公開した状態のまま動いています。
+旧版は社内規約に合っていないため**更新を止めています**（経緯は [docs/design-gap.md](docs/design-gap.md) #19）。
 
 ## これは何が変わったのか
 
@@ -22,23 +23,25 @@ EC商品の粗利率・MQ率を計算する社内ツールです。
 ## 構成
 
 ```
-画面（GitHub Pagesが配信）  →  Supabase（PostgreSQL ＋ ログイン）
+ブラウザ → コンテナ1つ（Node/Express）→ 共有データベース（PostgreSQL）
+             ├ 画面
+             ├ /api/*    業務API（ログイン必須）
+             └ /auth/*   社内認証システム
 ```
 
-自前のサーバーは持ちません。費用は無料枠の範囲内です。
+社内アプリ基盤（動的レーン）の規約に合わせた構成です。要点は [docs/platform.md](docs/platform.md)。
 
 ```
 packages/
   shared/   … 計算ロジック・型定義（テストもここ）
-  client/   … 画面（React + TypeScript + Vite）★これが本体
-  server/   … 旧構成（Express + Prisma + SQLite）。公開版では未使用・参考用に残置
+  client/   … 画面（React + TypeScript + Vite）
+  server/   … サーバー（Express + pg）★本体
   bsr/      … Amazon BSR・検索順位の自動記録バッチ（このアプリとは無関係に動く）
-supabase/   … DBスキーマ・アクセス制御・DB側の関数（SQL Editorに貼って実行する）
+db/migrations/ … データベースの定義（SQL）
+supabase/   … 旧構成の名残（使っていない。移行完了後に削除）
 legacy/     … 旧・静的HTML版（参考用、更新なし）
 docs/       … 設計メモ
 ```
-
-公開の手順とセキュリティ上の注意は [docs/deploy.md](docs/deploy.md) を参照してください。
 
 ## ジョブカンとの連携
 
@@ -97,34 +100,15 @@ BSRバッチとはGoogleの設定（サービスアカウント）を共有し�
 
 ## 他の人が改修するとき
 
-1. リポジトリをクローンする（公開リポジトリなので誰でも取得できる）
-2. **リポジトリへのpush権限**が必要 … オーナーに Settings → Collaborators から招待してもらう
-3. **Supabaseの接続先**が必要 … `packages/client/.env.example` を `.env.local` にコピーし、
-   SupabaseダッシュボードのSettings → APIから `Project URL` と `anon public` キーを記入する
-   （anonキーは公開前提の鍵なので秘密ではありません。公開版のJSにも埋め込まれています）
-4. **Supabaseのダッシュボードを触る必要がある場合**は、オーナーからプロジェクトに招待してもらう
+手順・守るべきルール・過去に踏んだ落とし穴は、すべて [CLAUDE.md](CLAUDE.md) にまとめてあります。
+Claude Code で開くと自動で読み込まれます。人が読む場合も、まずここから読んでください。
 
-```bash
-npm install
-cp packages/client/.env.example packages/client/.env.local   # 接続先を記入
-npm run build --workspace=packages/shared
-npm run dev --workspace=packages/client                       # http://localhost:5173
-```
-
-**手元の開発も公開版と同じデータベースに繋がります。** 試したデータは本番に入るので注意してください。
-
-`main` に push すると自動で公開版が更新されます。
-
-> Claude Code で改修する場合は、リポジトリ直下の [CLAUDE.md](CLAUDE.md) が自動で読み込まれます。
-> 守るべきルール（計算ロジックを変えない・新テーブルには必ずRLSを付ける等）と、
-> 過去に踏んだ落とし穴をまとめてあるので、人が読む場合も目を通してください。
+**ソフトのインストールは不要**です（npmだけで、本番と同じPostgreSQLが手元で動きます）。
 
 ## 今後やるべきこと
 
-- **商品マスタの登録**を進めること。未登録の商品の受注は集計に入らないので、
-  登録が進むほどダッシュボードの数字が実態に近づきます（HOMEのアラートに未紐付け件数が出ます）。
-- **確認メールの送信上限**。Supabase無料枠のメール送信は1時間に数通までです。
-  人数が増えて届かなくなったら、会社のメールサーバーをSMTPに設定してください（手順は deploy.md）。
-- 設計書（`MQ率計算アプリ_設計書.md`）との対応、決定事項、実装済みの内容は
-  [docs/design-gap.md](docs/design-gap.md) にまとめています。**新機能の検討はここから読んでください。**
-- 移植時点で挙げた運用上の論点は [docs/requirements-todo.md](docs/requirements-todo.md) に残しています。
+- **公開申請**（ジョブカンの「業務アプリ公開申請（動的レーン）」）
+- **旧版のデータの持ち込み**（今のSupabaseにある商品・受注を新しいデータベースへ）
+- **ジョブカン連携の移植**（Supabase版の Edge Function は新構成では動かない。定期実行バッチへ移す）
+- **商品マスタの登録**を進めること。未登録の商品の受注は集計に入りません
+- 設計書との対応・決定事項は [docs/design-gap.md](docs/design-gap.md) にまとめています。**新機能の検討はここから読んでください。**

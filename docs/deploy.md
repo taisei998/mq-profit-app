@@ -1,3 +1,9 @@
+> **★この文書は旧構成（Supabase＋GitHub Pages）のものです。2026-10-06に廃止しました。**
+> 社内アプリ基盤の規約（リポジトリ非公開・GitHub Pages禁止）に反していたためです。
+> 現在の構成と公開の流れは [docs/platform.md](platform.md) を参照してください。
+> 新しい公開版ができるまでの間、旧URL（https://taisei998.github.io/mq-profit-app/ ）は
+> 最後に公開した状態のまま動いています。**pushしても、もう更新されません**（自動公開を止めたため）。
+
 # 公開の手順（Supabase ＋ GitHub Pages）
 
 社内の人が在宅・出先からでもログインして使えるようにするための手順です。

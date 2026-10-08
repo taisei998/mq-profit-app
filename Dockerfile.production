@@ -1,7 +1,7 @@
 # 本番用イメージ。
 #
 # 固定のコマンドでビルドできること（コンテナ化規約1章）:
-#   docker build -f Dockerfile.production -t mq-profit:latest .
+#   docker build -f Dockerfile.production -t ec-mq-profit:latest .
 #
 # 【気をつけた点】
 #   - マルチステージ必須。ビルド用の道具を最終イメージに残さない（7章）

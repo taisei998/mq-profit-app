@@ -54,7 +54,8 @@ export async function runMigrations(): Promise<string[]> {
 // 単体で実行されたときだけ動く（import されただけでは動かない）
 const isMain = process.argv[1] != null && import.meta.url.endsWith(process.argv[1].replace(/\\/g, '/'));
 if (isMain || process.env.RUN_MIGRATIONS === '1') {
-  const config = loadConfig();
+  // マイグレーションはDBしか触らないので、社内認証の接続先は求めない
+  const config = loadConfig({ requireGateway: false });
   initDb(config);
   try {
     const applied = await runMigrations();

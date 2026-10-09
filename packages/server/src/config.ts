@@ -4,8 +4,15 @@
 //   - 設定はすべて環境変数から読む。Secrets Managerを自分で読みに行かない
 //     （基盤が起動時に環境変数へ入れてくれる）
 //   - 必須の値が無いときは、既定値に黙ってフォールバックせず**起動を失敗させる**
-//   - ただし「公開してからでないと決まらない値」は必須にしない。
-//     欠けていてもアプリは起動し、その機能だけ使えない状態にする
+//
+// 【社内認証の接続先（ACCESS_GATEWAY_URL / ACCESS_GATEWAY_CLIENT_ID）】
+//   **本番では必須**（2026-10 DXの点検で指摘）。
+//   当初は「公開してからでないと決まらない値」（ガイドライン1章の例外）と考えて任意にしていたが、
+//   本番用の値はDXが公開作業の中で、アプリを初めて起動する**前**に用意して設定するので例外に当たらない。
+//   任意のままだと、設定し忘れてもヘルスチェックは通るのに、ログインだけが黙って使えない状態で
+//   公開されてしまう。起動を中止すれば公開作業の時点で気付ける。
+//   手元の開発（NODE_ENV が production でない）では、値が無くても起動できるようにしてある。
+//   「本番かどうか」は Dockerfile.production が焼き込む NODE_ENV=production で判定する
 
 export interface Config {
   /** アプリ自身の公開URL。基盤が注入する */
@@ -60,7 +67,19 @@ function intOf(name: string, fallback: number): number {
   return n;
 }
 
-export function loadConfig(): Config {
+/** 本番用イメージで動いているか（Dockerfile.production が NODE_ENV=production を焼き込む） */
+export function isProduction(): boolean {
+  return process.env.NODE_ENV === 'production';
+}
+
+/**
+ * @param requireGateway 社内認証の接続先を必須にするか。既定は「本番なら必須」。
+ *   マイグレーションはDBしか触らないので false で呼ぶ
+ */
+export function loadConfig({ requireGateway = isProduction() }: { requireGateway?: boolean } = {}): Config {
+  const gatewayUrl = requireGateway ? required('ACCESS_GATEWAY_URL') : optional('ACCESS_GATEWAY_URL');
+  const gatewayClientId = requireGateway ? required('ACCESS_GATEWAY_CLIENT_ID') : optional('ACCESS_GATEWAY_CLIENT_ID');
+
   return {
     appUrl: required('APP_URL').replace(/\/+$/, ''),
     appName: required('PLATFORM_APP_NAME'),
@@ -76,10 +95,9 @@ export function loadConfig(): Config {
       ssl: (optional('DB_SSL') ?? 'true').toLowerCase() !== 'false',
     },
     gateway: {
-      // 公開申請が通るまで発行されないため、欠けていても起動できるようにしておく。
-      // 未設定のときはログイン画面に「準備中」と出す（アプリ実装ガイドライン1章の但し書き）
-      url: optional('ACCESS_GATEWAY_URL')?.replace(/\/+$/, '') ?? null,
-      clientId: optional('ACCESS_GATEWAY_CLIENT_ID'),
+      // 本番では上で必須チェック済み。手元で未設定のときは、ログイン画面に「準備中」と出す
+      url: gatewayUrl?.replace(/\/+$/, '') ?? null,
+      clientId: gatewayClientId,
     },
     sessionHours: intOf('SESSION_HOURS', 8),
   };

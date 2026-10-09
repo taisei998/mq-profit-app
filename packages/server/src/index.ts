@@ -31,8 +31,15 @@ export function createApp(config: Config) {
   const app = express();
 
   // ALBの後ろにいる。これを設定しないと、生成するURLがhttpになったり
-  // 利用者の実IPが取れなかったりする。ALB以外から直接届くことは無い構成
-  app.set('trust proxy', true);
+  // 利用者の実IPが取れなかったりする。
+  //
+  // ★ true にしないこと（2026-10 DXの点検で指摘）。
+  //   true だと req.ip は X-Forwarded-For の「先頭」になるが、先頭は利用者が自分で
+  //   好きな値を書いて送れるので、IPを偽装できてしまう。
+  //   この基盤でアプリの手前にいるプロキシはALBの1段だけで、ALBは実際の接続元IPを
+  //   X-Forwarded-For の「末尾」に付け足す。1 にすると、その末尾の値が使われる。
+  //   req.protocol が https になる点は true と変わらない
+  app.set('trust proxy', 1);
   app.disable('x-powered-by');
 
   app.use(

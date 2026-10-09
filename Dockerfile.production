@@ -8,12 +8,15 @@
 #   - 非rootで実行する（Dockerfile作成時の追加ガイドライン）
 #   - ベースイメージのタグはバージョン番号を含まない追従型にする。
 #     固定タグはその系列が世代交代した時点で中身が二度と更新されなくなるため
+#   - ただし node:slim ではなく node:lts-slim を使う（2026-10 DXの点検で指摘）。
+#     node:slim は最新リリースの系列（node:current-slim と同じ）を指し、新しいメジャー版が
+#     出るたびに中身が丸ごと入れ替わる。サポート期間の短い奇数番号の系列にも乗り換わる
 #   - 共有DBはTLS必須なので、RDSのCA証明書を同梱する（4章）
 
 # ============================================================
 # ビルド
 # ============================================================
-FROM node:slim AS build
+FROM node:lts-slim AS build
 
 WORKDIR /app
 
@@ -35,7 +38,7 @@ RUN npm run build --workspace=packages/shared \
  && npm run build --workspace=packages/client
 
 # 共有DB（RDS）のCA証明書バンドル。公開情報でシークレットではない（コンテナ化規約4章）。
-# node:slim には curl が無いので、Node 自身で取ってくる
+# node:lts-slim には curl が無いので、Node 自身で取ってくる
 RUN mkdir -p /etc/ssl/rds \
  && node -e "fetch('https://truststore.pki.rds.amazonaws.com/global/global-bundle.pem').then(async r=>{if(!r.ok)throw new Error('HTTP '+r.status);require('fs').writeFileSync('/etc/ssl/rds/global-bundle.pem',await r.text())}).catch(e=>{console.error(e);process.exit(1)})"
 
@@ -47,7 +50,7 @@ RUN mkdir -p /etc/ssl/rds \
 # ワークスペース全体で prune すると画面用やBSRバッチ用の依存まで残るため、
 # サーバーの依存だけを lockfile どおりに入れ直す（コンテナ化規約6章・7章）
 # ============================================================
-FROM node:slim AS deps
+FROM node:lts-slim AS deps
 
 WORKDIR /app
 COPY package.json package-lock.json ./
@@ -60,12 +63,17 @@ RUN npm ci --omit=dev --ignore-scripts --workspace=packages/server
 # ============================================================
 # 実行
 # ============================================================
-FROM node:slim AS runtime
+FROM node:lts-slim AS runtime
 
 # jq と awscli は entrypoint が自己申告設定を取り出すのに使う（コンテナ化規約5章）。
 # ca-certificates はHTTPS通信（社内認証システム・ジョブカン）に要る。
 # curl はビルド時に証明書を取るためだけに使っていたので、ここには入れない
+#
+# apt-get upgrade で、ベースイメージがまだ取り込んでいないOSのセキュリティ修正を当てる。
+# node:lts-slim は Debian の修正公開からイメージ更新まで間が空くことがあり、
+# 実際に perl-base の重大な脆弱性（修正版あり）が残っていた（2026-10-09）
 RUN apt-get update \
+ && apt-get upgrade -y --no-install-recommends \
  && apt-get install -y --no-install-recommends jq awscli ca-certificates \
  && rm -rf /var/lib/apt/lists/*
 
@@ -91,6 +99,10 @@ COPY db/migrations ./db/migrations
 
 COPY docker-entrypoint.sh /usr/local/bin/docker-entrypoint.sh
 RUN chmod +x /usr/local/bin/docker-entrypoint.sh
+
+# 本番であることの印。固定値で秘密でもないので、イメージに焼き込む（コンテナ化規約5章）。
+# これがあると、社内認証の接続先が未設定のとき起動を中止する（packages/server/src/config.ts）
+ENV NODE_ENV=production
 
 # 非rootで動かす。node イメージには最初から node ユーザーがいる
 USER node

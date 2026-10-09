@@ -30,3 +30,8 @@ Thumbs.db
 # 開発用データベース（手元だけ。消せば初期状態に戻る）
 .devdb/
 packages/server/.devdb/
+
+# 旧版から書き出した業務データ（原価・受注）。公開リポジトリに入れない
+db/legacy/*.csv
+db/legacy/*.json
+db/legacy/*_import.sql

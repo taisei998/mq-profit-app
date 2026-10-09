@@ -133,8 +133,18 @@ export function createApp(config: Config) {
 
   // --- エラー処理 ---
   app.use((err: unknown, _req: express.Request, res: express.Response, _next: express.NextFunction) => {
-    console.error('[error]', err);
     if (res.headersSent) return;
+    // 送られてきたデータが大きすぎる。「時間をおいて」では直らないので、そうは書かない
+    const type = (err as { type?: string })?.type;
+    if (type === 'entity.too.large') {
+      res.status(413).json({ error: '送信するデータが大きすぎます。ファイルを期間で分けて取り込んでください。' });
+      return;
+    }
+    if (type === 'entity.parse.failed') {
+      res.status(400).json({ error: '送られてきたデータを読み取れませんでした。画面を再読み込みしてやり直してください。' });
+      return;
+    }
+    console.error('[error]', err);
     res.status(500).json({ error: '処理に失敗しました。時間をおいて試してください。' });
   });
 

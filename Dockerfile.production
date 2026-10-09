@@ -34,9 +34,28 @@ RUN npm run build --workspace=packages/shared \
  && npm run build --workspace=packages/server \
  && npm run build --workspace=packages/client
 
-# ここから先は本番で使わない依存を落とす。
-# 最終イメージへ持ち込むのはこの node_modules だけ
-RUN npm prune --omit=dev
+# 共有DB（RDS）のCA証明書バンドル。公開情報でシークレットではない（コンテナ化規約4章）。
+# node:slim には curl が無いので、Node 自身で取ってくる
+RUN mkdir -p /etc/ssl/rds \
+ && node -e "fetch('https://truststore.pki.rds.amazonaws.com/global/global-bundle.pem').then(async r=>{if(!r.ok)throw new Error('HTTP '+r.status);require('fs').writeFileSync('/etc/ssl/rds/global-bundle.pem',await r.text())}).catch(e=>{console.error(e);process.exit(1)})"
+
+
+# ============================================================
+# 本番で使う依存だけを入れる
+#
+# 画面（client）はビルド済みの静的ファイルを配るだけなので、React等は実行時に要らない。
+# ワークスペース全体で prune すると画面用やBSRバッチ用の依存まで残るため、
+# サーバーの依存だけを lockfile どおりに入れ直す（コンテナ化規約6章・7章）
+# ============================================================
+FROM node:slim AS deps
+
+WORKDIR /app
+COPY package.json package-lock.json ./
+COPY packages/shared/package.json  packages/shared/package.json
+COPY packages/server/package.json  packages/server/package.json
+COPY packages/client/package.json  packages/client/package.json
+COPY packages/bsr/package.json     packages/bsr/package.json
+RUN npm ci --omit=dev --ignore-scripts --workspace=packages/server
 
 # ============================================================
 # 実行
@@ -45,18 +64,22 @@ FROM node:slim AS runtime
 
 # jq と awscli は entrypoint が自己申告設定を取り出すのに使う（コンテナ化規約5章）。
 # ca-certificates はHTTPS通信（社内認証システム・ジョブカン）に要る。
+# curl はビルド時に証明書を取るためだけに使っていたので、ここには入れない
 RUN apt-get update \
- && apt-get install -y --no-install-recommends jq awscli ca-certificates curl \
+ && apt-get install -y --no-install-recommends jq awscli ca-certificates \
  && rm -rf /var/lib/apt/lists/*
 
-# 共有DB（RDS）のCA証明書バンドル。公開情報でシークレットではない
-RUN mkdir -p /etc/ssl/rds \
- && curl -fsSL https://truststore.pki.rds.amazonaws.com/global/global-bundle.pem \
-      -o /etc/ssl/rds/global-bundle.pem
+# 実行時は node だけで動く。ベースイメージに同梱の npm / npx / corepack は使わないので消す。
+# 残しておくと、使っていない npm の依存の脆弱性をイメージごと抱えることになる（コンテナ化規約6章）
+RUN rm -rf /usr/local/lib/node_modules/npm /usr/local/lib/node_modules/corepack \
+           /usr/local/bin/npm /usr/local/bin/npx /usr/local/bin/corepack
+
+# 共有DB（RDS）のCA証明書バンドル（ビルド段階で取得したもの）
+COPY --from=build /etc/ssl/rds/global-bundle.pem /etc/ssl/rds/global-bundle.pem
 
 WORKDIR /app
 
-COPY --from=build /app/node_modules                 ./node_modules
+COPY --from=deps  /app/node_modules                 ./node_modules
 COPY --from=build /app/packages/shared/dist         ./packages/shared/dist
 COPY --from=build /app/packages/shared/package.json ./packages/shared/package.json
 COPY --from=build /app/packages/server/dist         ./packages/server/dist
